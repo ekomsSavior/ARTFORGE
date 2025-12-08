@@ -2,7 +2,7 @@
 
 Advanced Glitch Art Framework for Images, Video, Audio, and Databending
 
-
+![Screenshot_2025-12-08_18_23_25(2)](https://github.com/user-attachments/assets/6b822049-0f8d-43fb-97e5-1aa1b852fb1d)
 
 ARTFORGE is a multi-tool glitch art engine designed for artists, musicians, and experimental creators who want to transform ordinary media into distorted, data-bent, audio-reactive, and codec-corrupted artworks.
 It provides a fully interactive Python command-line interface that guides users through glitching images, videos, audio, and mixed-media compositions without needing to manually craft complex ffmpeg commands or edit hex by hand.
@@ -111,13 +111,7 @@ All output is saved automatically into the `output/` directory.
 
 ### Main Menu
 
-1. **Glitch a single file**
-2. **Glitch multiple files**
-3. **Combine / mesh multiple files**
-4. **Audio / Music tools**
-5. **Exit**
-
----
+![Screenshot_2025-12-08_18_23_25](https://github.com/user-attachments/assets/8ac4fbe6-7b50-4a2e-93f0-590f4d771a33)
 
 ## Glitch Modes
 
