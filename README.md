@@ -280,7 +280,7 @@ https://github.com/user-attachments/assets/07085af9-219d-4b88-b205-9a0a742ca4cd
 
 ## Shout Outs and Credits
 
-* **ffmpeg** for being the backbone of modern video and audio manipulation
+* **ffmpeg** for being the backbone of modern video and audio manipulation https://github.com/FFmpeg
 * **Kazz Coyote (Instagram)** for inspiration, glitch artistry, and community influence
 * **Glitchart Collective (Instagram)** for maintaining culture, tools, and databending methodology
 * Merlyn Alexander - https://merlynalexander.name/guides/glitch-primer-part-i/  
