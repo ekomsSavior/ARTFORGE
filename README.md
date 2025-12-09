@@ -165,6 +165,8 @@ Same effects as image processing, but applied across each frame.
 
 These modes intentionally abuse internal codec behavior:
 
+https://github.com/user-attachments/assets/db263eb4-cdef-405b-bb9a-b4203deef01e
+
 * **Datascope Overlay**
   Generates a moving datascope visual from the video and blends it back into the feed.
 
