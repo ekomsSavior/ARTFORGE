@@ -29,6 +29,10 @@ class Colors:
     END = '\033[0m'
 
 
+def clear_screen():
+    os.system("cls" if os.name == "nt" else "clear")
+
+
 # ----------------- Generic helpers ----------------- #
 
 def run_cmd(cmd: list):
@@ -515,10 +519,18 @@ def advanced_datascope(input_path: Path):
 def advanced_snow_codec(input_path: Path):
     print("\n=== SNOW CODEC CORRUPTION ===")
     size = ask_int("Scale size (e.g. 512 → 512x512)", 512, 64, 4096)
-    amount = ask_int("Noise amount (stronger = more broken)", 1000, 0, 100000)
+    aggression = ask_int("Aggression level (1-5, 1 = subtle, 5 = meltdown)", 3, 1, 5)
+
+    # Pixel-space noise (0-100 is useful range for noise=alls)
+    pixel_noise = min(100, 10 * aggression + 20)
+    # Bitstream noise for the bsf (higher = more broken GOP/blocks)
+    bit_noise = 800 * aggression * aggression
 
     temp_path = build_output_path(input_path, "snow_temp", ext_override=".avi")
     out_path = build_output_path(input_path, "snow")
+
+    # Visible noise + downscale for crunch
+    vf = f"scale={size}x{size},noise=alls={pixel_noise}:allf=t+u"
 
     # Step 1: corrupt with snow codec + bitstream noise
     cmd1 = [
@@ -526,15 +538,15 @@ def advanced_snow_codec(input_path: Path):
         "-y",
         "-i",
         str(input_path),
+        "-vf",
+        vf,
         "-c:v",
         "snow",
-        "-vf",
-        f"scale={size}x{size}",
         "-bsf:v",
-        f"noise=amount={amount}*not(key)",
+        f"noise=amount={bit_noise}*not(key)",
         str(temp_path),
     ]
-    print(f"\n[+] Snow corruption pass → {temp_path}")
+    print(f"\n[+] Snow corruption pass (aggression={aggression}) → {temp_path}")
     run_cmd(cmd1)
 
     # Step 2: re-encode to mp4
@@ -557,18 +569,32 @@ def advanced_snow_codec(input_path: Path):
 def advanced_x265_glitch(input_path: Path):
     print("\n=== X265 BLOCK / SLICE GLITCH ===")
     size = ask_int("Scale size (e.g. 512 → 512x512)", 512, 64, 4096)
-    noise_amount = ask_int("Noise amount", 3000, 0, 100000)
+    aggression = ask_int("Aggression level (1-5, 1 = subtle, 5 = meltdown)", 3, 1, 5)
+
+    # Pixel noise for visible grain/blocking
+    pixel_noise = min(100, 12 * aggression + 10)
+    # Bitstream noise to hammer the encoded stream
+    bit_noise = 1000 * aggression * aggression
+    # More aggression → higher CRF (worse quality, more artifacts)
+    crf = 26 + aggression * 3
 
     temp_path = build_output_path(input_path, "x265_temp", ext_override=".mp4")
     out_path = build_output_path(input_path, "x265")
 
+    # x265 params: long GOP, no deblock/SAO, no psycho optimizations, crunchy CRF
     xparams = (
-        "min_keyint=1000:"
-        "keyint=1000:"
-        "bframes=0:"
-        "min_cu_size=16:"
-        "ctu=16:"
-        "slices=1"
+        f"min_keyint=1000:keyint=1000:"
+        f"bframes=0:min_cu_size=8:ctu=16:slices=1:"
+        f"no-sao=1:no-deblock=1:aq-mode=0:psy-rd=0.0:psy-rdoq=0.0:crf={crf}"
+    )
+
+    # Visible glitch chain before encoding:
+    #  - scale to chunky size
+    #  - add strong temporal smear with tmix
+    vf = (
+        f"scale={size}x{size},"
+        f"noise=alls={pixel_noise}:allf=t+u,"
+        "tmix=frames=3:weights='1 1 1'"
     )
 
     cmd1 = [
@@ -577,16 +603,16 @@ def advanced_x265_glitch(input_path: Path):
         "-i",
         str(input_path),
         "-vf",
-        f"scale={size}x{size}",
+        vf,
         "-c:v",
         "libx265",
         "-x265-params",
         xparams,
         "-bsf:v",
-        f"noise=amount={noise_amount}",
+        f"noise=amount={bit_noise}",
         str(temp_path),
     ]
-    print(f"\n[+] X265 glitch encode → {temp_path}")
+    print(f"\n[+] X265 glitch encode (aggression={aggression}, CRF={crf}) → {temp_path}")
     run_cmd(cmd1)
 
     cmd2 = [
@@ -716,7 +742,7 @@ def combine_stack(paths, media_type, direction="h"):
 
     cmd.append(str(out_path))
 
-    print(f"\n[+] {suffix.upper()} {in0} and {in1} → {out_path}")
+    print(f"\n[+] {suffix.UPPER()} {in0} and {in1} → {out_path}")
     run_cmd(cmd)
 
 
@@ -764,6 +790,125 @@ def combine_menu(media_type):
     print("  4. 2x2 grid (needs 4 inputs)")
     choice = input("Choose (1-4): ").strip()
     return choice
+
+
+# ----------------- VIDEO PNG OVERLAY (LOGO / TEXTURE) ----------------- #
+
+def video_overlay_png_menu(video_paths):
+    """
+    Overlay a PNG (with or without transparent background) on top of one or more videos.
+    This is perfect for logos, textures, or repeating visual motifs.
+    """
+    if not video_paths:
+        print("[!] No video files provided.")
+        return
+
+    clear_screen()
+    print("\n=== VIDEO + PNG OVERLAY ===")
+    print("This mode overlays a PNG (transparent background supported) on your video(s).")
+    print("Use a logo, texture, or any PNG and let it ride on top of your glitches.\n")
+    print("[!] Heads up: PNG overlays and full-frame blends can be slow to render,")
+    print("    especially on long or high-resolution clips. Let ffmpeg cook.\n")
+
+    png_path_raw = input("[?] Enter path to your PNG/logo file: ").strip()
+    png_paths = parse_paths(png_path_raw)
+    if not png_paths:
+        print("[!] No valid PNG file.")
+        return
+    png = png_paths[0]
+
+    print("\nOverlay style:")
+    print("  1. Static center")
+    print("  2. Static corner / custom position")
+    print("  3. Bouncing overlay (orbit-style)")
+    choice = input("Choose (1-3) [1]: ").strip() or "1"
+
+    # Precompute overlay expression (for normal alpha overlay)
+    if choice == "1":
+        # Centered logo / texture
+        overlay_expr = "overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2:format=auto"
+    elif choice == "2":
+        print("\nPosition presets:")
+        print("  1. Top-left")
+        print("  2. Top-right")
+        print("  3. Bottom-left")
+        print("  4. Bottom-right")
+        print("  5. Custom x/y offsets")
+        preset = input("Choose position (1-5) [1]: ").strip() or "1"
+
+        if preset == "1":
+            x_expr = "10"
+            y_expr = "10"
+        elif preset == "2":
+            x_expr = "main_w-overlay_w-10"
+            y_expr = "10"
+        elif preset == "3":
+            x_expr = "10"
+            y_expr = "main_h-overlay_h-10"
+        elif preset == "4":
+            x_expr = "main_w-overlay_w-10"
+            y_expr = "main_h-overlay_h-10"
+        else:
+            # Custom numeric offsets from top-left corner
+            x_off = ask_int("Custom X offset (pixels from left)", 40, -10000, 10000)
+            y_off = ask_int("Custom Y offset (pixels from top)", 40, -10000, 10000)
+            x_expr = str(x_off)
+            y_expr = str(y_off)
+
+        overlay_expr = f"overlay={x_expr}:{y_expr}:format=auto"
+    else:
+        # Bouncing / orbit overlay using sin/cos over time
+        overlay_expr = (
+            "overlay="
+            "x='(main_w-overlay_w)/2 + sin(t*2)*((main_w-overlay_w)/2-20)':"
+            "y='(main_h-overlay_h)/2 + cos(t*2)*((main_h-overlay_h)/2-20)':"
+            "format=auto"
+        )
+
+    print("\nBlend / compositing mode for PNG:")
+    print("  1. Normal alpha overlay (respect PNG transparency & position)")
+    print("  2. Full-frame blend mode (ffmpeg blend=all_mode=...)")
+    blend_choice = input("Choose (1-2) [1]: ").strip() or "1"
+
+    blend_mode = None
+    blend_opacity = None
+    if blend_choice == "2":
+        blend_mode = ask_string(
+            "Blend mode (addition, screen, overlay, multiply, difference, etc.)",
+            "screen",
+        )
+        blend_opacity = ask_float("Blend opacity (0.0-1.0)", 0.8, 0.0, 1.0)
+        print("\n[*] Note: full-frame blend mode ignores the bounce/position math and")
+        print("    blends the PNG as a texture over the whole frame using scale2ref.")
+
+    for video in video_paths:
+        video = Path(video)
+        out_path = build_output_path(video, "png_overlay", ext_override=".mp4")
+
+        if blend_choice == "1":
+            # Normal alpha overlay with all the positioning / bouncing options
+            fc = f"[0:v][1:v]{overlay_expr}[v]"
+        else:
+            # Full-frame blend: base video + PNG as texture with chosen mode/opacity
+            fc = (
+                "[0:v][1:v]scale2ref[fg][bg];"
+                f"[bg][fg]blend=all_mode={blend_mode}:all_opacity={blend_opacity}[v]"
+            )
+
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i", str(video),
+            "-loop", "1", "-i", str(png),
+            "-filter_complex", fc,
+            "-map", "[v]",
+            "-map", "0:a?",
+            "-c:a", "copy",
+            str(out_path),
+        ]
+
+        print(f"\n[+] Overlaying {png} on {video} → {out_path}")
+        run_cmd(cmd)
 
 
 # ----------------- AUDIO / MUSIC TOOLS ----------------- #
@@ -868,6 +1013,7 @@ def image_to_music_video():
     ]
     run_cmd(cmd)
 
+
 def audio_reactive_glitch_mode():
     """
     Experimental audio-reactive mode:
@@ -908,6 +1054,7 @@ def audio_reactive_glitch_mode():
 
     print(f"\n[+] Audio-reactive spectrum overlay → {out_path}")
     run_cmd(cmd)
+
 
 def mode_audio_music():
     """
@@ -991,7 +1138,8 @@ def mode_single_or_batch(single: bool):
         print("  1. Standard filter chain (chainable)")
         print("  2. Advanced / codec glitches (datascope, snow, x265)")
         print("  3. Text / ASCII overlay")
-        vmode = input("Choose (1-3): ").strip()
+        print("  4. PNG overlay (logo / texture)")
+        vmode = input("Choose (1-4): ").strip() or "1"
 
         if vmode == "1":
             v_chain, a_chain = interactive_build_video_chain()
@@ -1003,6 +1151,8 @@ def mode_single_or_batch(single: bool):
             interactive_advanced_video_mode(paths)
         elif vmode == "3":
             text_overlay_batch(paths, media_type="video")
+        elif vmode == "4":
+            video_overlay_png_menu(paths)
         else:
             print("[!] Invalid video mode.")
 
