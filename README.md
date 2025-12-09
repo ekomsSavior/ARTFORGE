@@ -117,6 +117,10 @@ All output is saved automatically into the `output/` directory.
 
 ![Untitled_Artwork(1)_glitch_blend_xor](https://github.com/user-attachments/assets/8fb48f0c-2d74-4f40-b52f-28f91811d9fb)
 
+
+https://github.com/user-attachments/assets/47eac247-ee5c-4073-ad38-9082288e19e8
+
+
 ### 1. Image Modes
 
 #### A. FFmpeg Filter Chain
