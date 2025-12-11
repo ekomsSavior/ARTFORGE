@@ -204,33 +204,115 @@ When blending, ARTFORGE scales and aligns inputs automatically.
 
 When the tool asks for a “blend mode”, users may type any of the following ffmpeg modes:
 
-addition
-average
-burn
-darken
-difference
-divide
-dodge
-exclusion
-glow
-grainextract
-grainmerge
-hardlight
-hardmix
-lighten
-linearlight
-multiply
-negation
-overlay
-phoenix
-pinlight
-reflect
-screen
-softlight
-stain
-subtract
-vividlight
-xor
+### **addition**
+
+Adds pixel values from both layers together, brightening the image. Strong highlight amplification and glow-like effects.
+
+### **average**
+
+Averages pixel values between both layers, producing a smoother, muted blend. Reduces contrast; good for soft glitch overlays.
+
+### **burn**
+
+Darkens the base layer by increasing contrast where the overlay is brighter. Creates heavy, harsh shadows and saturated dark regions.
+
+### **darken**
+
+Compares both layers pixel-by-pixel and keeps the darker value. Produces a dimmer, more shadow-heavy composite.
+
+### **difference**
+
+Subtracts one layer from the other and takes the absolute value. Creates high-contrast, color-inverted glitch effects and neon edges.
+
+### **divide**
+
+Divides pixel values of the base by the overlay, brightening and washing out areas where the overlay is darker. Produces blown-out, experimental glitch textures.
+
+### **dodge**
+
+Brightens the base layer depending on the brightness of the overlay. Creates intense highlights and dramatic flare-like artifacts.
+
+### **exclusion**
+
+Similar to difference but softer. Produces smoky, dream-like inversions with low-contrast neon shifts.
+
+### **glow**
+
+Boosts brightness and color in highlights, giving a soft halo effect. Ideal for VHS-style bloom.
+
+### **grainextract**
+
+Subtracts the overlay from the base but clamps the midpoint. Generates a grey, noisy, grain-texture map — useful for adding analog grit.
+
+### **grainmerge**
+
+Adds extracted grain onto the image. Restores or intensifies noise and texture.
+
+### **hardlight**
+
+Uses overlay brightness to determine whether to brighten or darken. Produces rich contrast, punchy colors, and dramatic glitch layers.
+
+### **hardmix**
+
+Posterizes the blend into near-binary colors (harsh reds, greens, blues). Very aggressive; produces digital-destruction aesthetics.
+
+### **lighten**
+
+Compares both layers and keeps the lighter pixel value. Good for layering bright textures or scans.
+
+### **linearlight**
+
+A strong contrast mode combining linear dodge and burn. Harsh, bright, intense — great for experimental video distortion.
+
+### **multiply**
+
+Darkens the base by multiplying pixel values. Natural shadowing effect; can simulate ink, print, or film layering.
+
+### **negation**
+
+Inverts the sum of both layers. Creates surreal, ghost-like inversions with soft tonal shifts.
+
+### **overlay**
+
+A classic mix of multiply (dark areas) and screen (light areas). Enhances contrast while preserving detail.
+
+### **phoenix**
+
+Creates a chaotic, reversed subtractive blend. Generates unpredictable color chaos — excellent for glitch art.
+
+### **pinlight**
+
+Replaces pixels depending on brightness thresholds. Produces high-contrast, fractured textures.
+
+### **reflect**
+
+Brightens highlights dramatically by dividing by the inverse of the overlay. Creates metallic, mirrored shine effects.
+
+### **screen**
+
+Lightens the image by inverting, multiplying, and re-inverting. Great for soft brightening and luminous overlays.
+
+### **softlight**
+
+Gentle version of hardlight. Applies subtle contrast and color changes. Film-like and atmospheric.
+
+### **stain**
+
+A subtractive mode that selectively darkens based on overlay tones. Creates dirty, smeared, dyed-paper textures.
+
+### **subtract**
+
+Subtracts overlay pixel values from the base. Produces hard-edged darkening and negative-space distortions.
+
+### **vividlight**
+
+Extreme version of linear dodge and burn. Very high contrast, very intense highlights/shadows. Perfect for aggressive glitch looks.
+
+### **xor**
+
+Pixel-wise Boolean XOR. Produces unpredictable digital patterns, color block artifacts, and corruption-like glitch effects.
+
+
 
 Additional ffmpeg blend modes may work as well; these are the most reliable and widely used.
 
