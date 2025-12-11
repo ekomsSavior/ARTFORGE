@@ -101,7 +101,7 @@ def parse_paths(raw: str):
 
 
 def ffmpeg_escape_text(s: str) -> str:
-    """
+    r"""
     Escape characters that upset drawtext (\, :, ', newlines → \n).
     This is not perfect, but works well for captions / ASCII blocks.
     """
@@ -709,6 +709,17 @@ def combine_blend(paths, media_type):
 
 
 def combine_stack(paths, media_type, direction="h"):
+    """
+    Side-by-side (hstack) or top/bottom (vstack) for 2 inputs.
+
+    Uses scale2ref so that input 1 is scaled to match input 0's
+    width/height. This guarantees matching dimensions for hstack/vstack.
+
+    For **images**, we:
+      - always output PNG
+      - force a single frame and explicit PNG codec to avoid
+        mjpeg/image2 weirdness and SIGABRT crashes.
+    """
     if len(paths) < 2:
         print("[!] Need at least 2 files to stack.")
         return
@@ -717,16 +728,27 @@ def combine_stack(paths, media_type, direction="h"):
         paths = paths[:2]
 
     in0, in1 = paths
-    out_ext = ".mp4" if media_type == "video" else in0.suffix or ".png"
+
+    if media_type == "video":
+        out_ext = ".mp4"
+    else:
+        # use PNG for stacked stills for maximum stability
+        out_ext = ".png"
+
     suffix = "hstack" if direction == "h" else "vstack"
     out_path = build_output_path(in0, suffix, ext_override=out_ext)
 
-    stack_filter = "hstack=inputs=2" if direction == "h" else "vstack=inputs=2"
+    if direction == "h":
+        stack_filter = "hstack=inputs=2"
+    else:
+        stack_filter = "vstack=inputs=2"
 
+    # Scale input 1 to match input 0 using scale2ref.
+    # [1:v] is "main" (scaled), [0:v] is "ref" (keeps its size).
+    # Both outputs (ref_s, main_s) end up same w/h.
     fc = (
-        "[0:v]scale=iw:-1[a];"
-        "[1:v]scale=iw:-1[b];"
-        "[a][b]" + stack_filter + "[v]"
+        "[1:v][0:v]scale2ref=w=iw:h=ih[main_s][ref_s];"
+        f"[ref_s][main_s]{stack_filter}[v]"
     )
 
     cmd = [
@@ -737,12 +759,17 @@ def combine_stack(paths, media_type, direction="h"):
         "-filter_complex", fc,
         "-map", "[v]",
     ]
+
     if media_type == "video":
+        # keep audio from first input if present
         cmd += ["-map", "0:a?", "-c:a", "copy"]
+    else:
+        # single output frame as PNG – avoids mjpeg/image2 crash weirdness
+        cmd += ["-frames:v", "1", "-f", "image2", "-c:v", "png"]
 
     cmd.append(str(out_path))
 
-    print(f"\n[+] {suffix.UPPER()} {in0} and {in1} → {out_path}")
+    print(f"\n[+] {suffix.upper()} {in0} and {in1} → {out_path}")
     run_cmd(cmd)
 
 
