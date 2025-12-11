@@ -38,6 +38,8 @@ Its goal is to give creators a modern, accessible, maximal glitch toolkit that r
 
 ### Video Glitching
 
+https://github.com/user-attachments/assets/269f092f-6426-40b9-872f-cc5ff43db5c9
+
 * Standard ffmpeg glitch chains (same logic as images, extended for video)
 * Advanced codec-based glitching:
 
@@ -468,9 +470,6 @@ The stego mode continues this philosophy by treating images as carriers for encr
 * Merlyn Alexander – [https://merlynalexander.name/guides/glitch-primer-part-i/](https://merlynalexander.name/guides/glitch-primer-part-i/)
 
 ![Screenshot 2025-10-14 111008\_glitch](https://github.com/user-attachments/assets/a8f5fb93-a80a-427c-b16b-6166a571c8df)
-
-
-https://github.com/user-attachments/assets/269f092f-6426-40b9-872f-cc5ff43db5c9
 
 <img width="676" height="1272" alt="E5727FEE-3F86-4B45-ABDB-2FB67CADEAA7_vstack" src="https://github.com/user-attachments/assets/06631b38-93af-4fc5-92cf-c969d443a259" />
 
