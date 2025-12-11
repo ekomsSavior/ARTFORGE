@@ -3,6 +3,8 @@ import subprocess
 from pathlib import Path
 import os
 import random
+import base64
+import hashlib
 
 # Optional glitchart library (pip3 install glitchart)
 try:
@@ -11,6 +13,21 @@ try:
 except ImportError:
     glitchart = None
     HAS_GLITCHART = False
+
+# Optional crypto & image libraries for stego mode
+try:
+    from cryptography.fernet import Fernet
+    HAS_CRYPTO = True
+except ImportError:
+    Fernet = None
+    HAS_CRYPTO = False
+
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    Image = None
+    HAS_PIL = False
 
 OUTPUT_DIR = Path("output")
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -303,6 +320,138 @@ def hex_databending_batch(paths):
             print(f"    → Wrote {out_path}")
         except Exception as e:
             print(f"[!] Could not write {out_path}: {e}")
+
+
+# ----------------- STEGO / ENCRYPTED MESSAGE HELPERS ----------------- #
+
+STEGO_MAGIC = b"AF_STEG1"  # ArtForge stego marker
+
+
+def derive_fernet_from_passphrase(passphrase: str) -> "Fernet":
+    """
+    Derive a Fernet key from a human passphrase using SHA-256.
+    This is not a full KDF with salt/iterations, but good enough
+    for "only people with the passphrase can read the message."
+    """
+    if not HAS_CRYPTO:
+        raise RuntimeError(
+            "cryptography is not installed. Run: pip3 install cryptography"
+        )
+    digest = hashlib.sha256(passphrase.encode("utf-8")).digest()
+    key = base64.urlsafe_b64encode(digest)
+    return Fernet(key)
+
+
+def bytes_to_bits(data: bytes):
+    """Yield bits (0/1) from bytes, MSB-first."""
+    for b in data:
+        for i in range(7, -1, -1):
+            yield (b >> i) & 1
+
+
+def bits_to_bytes(bits):
+    """Convert an iterable of bits (0/1) into bytes."""
+    out = bytearray()
+    current = 0
+    count = 0
+    for bit in bits:
+        current = (current << 1) | (bit & 1)
+        count += 1
+        if count == 8:
+            out.append(current)
+            current = 0
+            count = 0
+    return bytes(out)
+
+
+def stego_embed_in_image(input_path: Path, ciphertext: bytes) -> Path:
+    """
+    Embed encrypted payload into the least significant bits of an image.
+    Always outputs a PNG in output/.
+    """
+    if not HAS_PIL:
+        raise RuntimeError("Pillow (PIL) is not installed. Run: pip3 install pillow")
+
+    img = Image.open(str(input_path))
+    img = img.convert("RGB")
+    width, height = img.size
+    pixels = list(img.getdata())
+
+    # Build payload: MAGIC || length (4 bytes) || ciphertext
+    length_bytes = len(ciphertext).to_bytes(4, byteorder="big")
+    payload = STEGO_MAGIC + length_bytes + ciphertext
+    total_bits = len(payload) * 8
+
+    capacity_bits = width * height * 3  # 1 bit per R,G,B channel
+    if total_bits > capacity_bits:
+        raise ValueError(
+            f"Message too large for this image. "
+            f"Needed {total_bits} bits, but capacity is {capacity_bits} bits."
+        )
+
+    bit_stream = bytes_to_bits(payload)
+    new_pixels = []
+
+    try:
+        for (r, g, b) in pixels:
+            new_channels = []
+            for chan in (r, g, b):
+                try:
+                    bit = next(bit_stream)
+                    new_chan = (chan & 0xFE) | bit  # set LSB to bit
+                except StopIteration:
+                    new_chan = chan
+                new_channels.append(new_chan)
+            new_pixels.append(tuple(new_channels))
+    except StopIteration:
+        # Shouldn't happen because we already checked capacity, but just in case
+        pass
+
+    stego_img = Image.new("RGB", (width, height))
+    stego_img.putdata(new_pixels)
+
+    out_path = build_output_path(input_path, "stego", ext_override=".png")
+    stego_img.save(str(out_path), format="PNG")
+    return out_path
+
+
+def stego_extract_from_image(input_path: Path) -> bytes:
+    """
+    Extract ciphertext payload from an image's LSBs.
+    Returns the raw ciphertext (to be decrypted with the passphrase).
+    """
+    if not HAS_PIL:
+        raise RuntimeError("Pillow (PIL) is not installed. Run: pip3 install pillow")
+
+    img = Image.open(str(input_path))
+    img = img.convert("RGB")
+    pixels = list(img.getdata())
+
+    bits = []
+    for (r, g, b) in pixels:
+        bits.append(r & 1)
+        bits.append(g & 1)
+        bits.append(b & 1)
+
+    data = bits_to_bytes(bits)
+
+    if not data.startswith(STEGO_MAGIC):
+        raise ValueError("No ArtForge stego marker found in this image.")
+
+    idx = len(STEGO_MAGIC)
+    if len(data) < idx + 4:
+        raise ValueError("Stego payload truncated (no length field).")
+
+    length_bytes = data[idx:idx + 4]
+    msg_len = int.from_bytes(length_bytes, byteorder="big")
+    start = idx + 4
+    end = start + msg_len
+
+    if end > len(data):
+        raise ValueError("Stego payload truncated (ciphertext length mismatch).")
+
+    ciphertext = data[start:end]
+    return ciphertext
 
 
 # ----------------- TEXT / ASCII OVERLAY (IMAGES & VIDEOS) ----------------- #
@@ -1111,6 +1260,125 @@ def mode_audio_music():
             print("[!] Invalid choice.")
 
 
+# ----------------- STEGO / ENCRYPTED MESSAGE MODE ----------------- #
+
+def mode_stego():
+    """
+    Steganography mode:
+      1) Embed an encrypted message into an image.
+      2) Extract + decrypt a message from an image.
+    """
+    if not HAS_PIL:
+        print("[!] Pillow (PIL) is not installed. Run: pip3 install pillow")
+        return
+    if not HAS_CRYPTO:
+        print("[!] cryptography is not installed. Run: pip3 install cryptography")
+        return
+
+    while True:
+        print("\nStego / Encrypted messages:")
+        print("  1. Embed hidden encrypted message into image")
+        print("  2. Decode hidden encrypted message from image")
+        print("  3. Back to main menu")
+
+        choice = input("Choice (1-3): ").strip()
+
+        if choice == "1":
+            # ENCODE
+            img_path_raw = input("\n[?] Enter path to your image: ").strip()
+            paths = parse_paths(img_path_raw)
+            if not paths:
+                print("[!] No valid image file.")
+                continue
+            img_path = paths[0]
+
+            print("\nMessage source:")
+            print("  1. Type message directly")
+            print("  2. Load message from text file")
+            msrc = input("Choice (1/2) [1]: ").strip() or "1"
+
+            if msrc == "2":
+                tpath_raw = input("[?] Path to text file: ").strip()
+                tpaths = parse_paths(tpath_raw)
+                if not tpaths:
+                    print("[!] Text file not found.")
+                    continue
+                try:
+                    plaintext = tpaths[0].read_text(encoding="utf-8", errors="ignore")
+                except Exception as e:
+                    print(f"[!] Could not read text file: {e}")
+                    continue
+            else:
+                print("[?] Type your secret message. Press ENTER when done.")
+                plaintext = input("Message: ")
+
+            if not plaintext:
+                print("[!] Empty message, nothing to embed.")
+                continue
+
+            passphrase = input(
+                "\n[?] Enter passphrase (share this with the recipient to decode): "
+            ).strip()
+            if not passphrase:
+                print("[!] Passphrase cannot be empty.")
+                continue
+
+            try:
+                f = derive_fernet_from_passphrase(passphrase)
+                ciphertext = f.encrypt(plaintext.encode("utf-8"))
+                out_path = stego_embed_in_image(img_path, ciphertext)
+                print(f"[+] Hidden message embedded in: {out_path}")
+                print("[*] Share this image + the passphrase with your friend to decode.")
+            except Exception as e:
+                print(f"[!] Stego embed error: {e}")
+
+        elif choice == "2":
+            # DECODE
+            img_path_raw = input("\n[?] Enter path to the image with hidden message: ").strip()
+            paths = parse_paths(img_path_raw)
+            if not paths:
+                print("[!] No valid image file.")
+                continue
+            img_path = paths[0]
+
+            passphrase = input("[?] Enter passphrase to decrypt: ").strip()
+            if not passphrase:
+                print("[!] Passphrase cannot be empty.")
+                continue
+
+            try:
+                ciphertext = stego_extract_from_image(img_path)
+            except Exception as e:
+                print(f"[!] Stego extract error: {e}")
+                continue
+
+            try:
+                f = derive_fernet_from_passphrase(passphrase)
+                plaintext = f.decrypt(ciphertext).decode("utf-8", errors="replace")
+            except Exception as e:
+                print(f"[!] Decryption failed (wrong key or corrupted data): {e}")
+                continue
+
+            print("\n[+] Hidden message:")
+            print("--------------------------------------------------")
+            print(plaintext)
+            print("--------------------------------------------------")
+
+            save_choice = input("Save this message to a text file? (y/N): ").strip().lower()
+            if save_choice == "y":
+                out_txt = build_output_path(img_path, "stego_message", ext_override=".txt")
+                try:
+                    out_txt.write_text(plaintext, encoding="utf-8")
+                    print(f"[+] Saved to: {out_txt}")
+                except Exception as e:
+                    print(f"[!] Could not save text file: {e}")
+
+        elif choice == "3":
+            break
+        else:
+            print("[!] Invalid choice.")
+
+
 # ----------------- HIGH-LEVEL MODES ----------------- #
 
 def mode_single_or_batch(single: bool):
@@ -1242,9 +1510,10 @@ For artists, hackers, and glitch witches
         print("  2. Glitch multiple files (same settings)")
         print("  3. Combine / mesh multiple files")
         print("  4. Audio / Music tools")
-        print("  5. Exit")
+        print("  5. Stego / Encrypted messages")
+        print("  6. Exit")
 
-        choice = input("Choice (1-5): ").strip()
+        choice = input("Choice (1-6): ").strip()
 
         if choice == "1":
             mode_single_or_batch(single=True)
@@ -1255,6 +1524,8 @@ For artists, hackers, and glitch witches
         elif choice == "4":
             mode_audio_music()
         elif choice == "5":
+            mode_stego()
+        elif choice == "6":
             print("Bye.")
             break
         else:
