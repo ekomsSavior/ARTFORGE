@@ -455,7 +455,7 @@ This keeps originals untouched and makes it easy to track which pipeline produce
 
 ARTFORGE is designed to bring the aesthetics of early databending, experimental video synthesis, and modern glitch art under one framework. It avoids mock or fake effects and instead leans into genuine compression artifacts, codec misbehavior, and real byte corruption wherever possible.
 
-The stego mode continues this philosophy by treating images as carriers for encrypted stories, prompts, and signals between collaborators.
+The stego mode continues this philosophy by treating digital art as a carrier for encrypted stories, prompts, and signals between collaborators.
 
 ---
 
