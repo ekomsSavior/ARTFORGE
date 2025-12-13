@@ -233,6 +233,12 @@ Two variants:
 
 If Torch isn’t installed, the Torch warp option will warn and return to menu.
 
+
+
+https://github.com/user-attachments/assets/fec8c2cd-671f-422e-94c3-2c156569c7b4
+
+
+
 ---
 
 ### 2. Video Modes
