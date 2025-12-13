@@ -81,6 +81,7 @@ Install it on Linux:
 ```bash
 sudo apt update
 sudo apt install ffmpeg
+pip3 install torch --index-url https://download.pytorch.org/whl/cpu --break-system-packages
 ````
 
 Confirm installation:
