@@ -29,6 +29,30 @@ except ImportError:
     Image = None
     HAS_PIL = False
 
+# Optional scientific stack for warps (SciPy / NumPy / Torch)
+try:
+    import numpy as np  # type: ignore
+    HAS_NUMPY = True
+except ImportError:
+    np = None
+    HAS_NUMPY = False
+
+try:
+    from scipy import ndimage  # type: ignore
+    HAS_SCIPY = True
+except ImportError:
+    ndimage = None
+    HAS_SCIPY = False
+
+try:
+    import torch  # type: ignore
+    from torch.nn.functional import grid_sample  # type: ignore
+    HAS_TORCH = True
+except ImportError:
+    torch = None
+    grid_sample = None
+    HAS_TORCH = False
+
 OUTPUT_DIR = Path("output")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
@@ -326,6 +350,129 @@ def hex_databending_batch(paths):
 
 STEGO_MAGIC = b"AF_STEG1"  # ArtForge stego marker
 
+
+
+# -----------------  IMAGE WARP (SciPy / Torch) ----------------- #
+
+def distance_warp_scipy(input_path: str, iterations: int = 8) -> str:
+    """
+      - 'distance warp' image effect (from the IG slides):
+      - Creates a binary mask based on per-pixel mean vs global mean
+      - Morphological closing to smooth blobs
+      - Uses distance_transform_edt(return_indices=True) to build a remap
+      - Warps pixels by nearest-index mapping
+
+    Requires: numpy + scipy + pillow
+    """
+    if not (HAS_PIL and HAS_NUMPY and HAS_SCIPY):
+        missing = []
+        if not HAS_PIL:
+            missing.append("pillow")
+        if not HAS_NUMPY:
+            missing.append("numpy")
+        if not HAS_SCIPY:
+            missing.append("scipy")
+        print(f"[!] warp needs: {', '.join(missing)}")
+        return ""
+
+    img = Image.open(input_path).convert("RGB")
+    arr = np.array(img)
+
+    # Per-pixel luminance proxy and global mean threshold
+    image_mean = arr.mean(axis=-1)
+    global_mean = float(image_mean.mean())
+
+    # Binary mask: brighten > global mean → 0, else 1
+    binary = np.where(image_mean > global_mean, 0, 1).astype(np.uint8)
+
+    # Smooth shapes; iterations controls chunkiness
+    binary = ndimage.binary_closing(binary, iterations=iterations)
+
+    # Return indices for nearest background (or foreground) pixels
+    indices = ndimage.distance_transform_edt(binary, return_indices=True)[1]  # (2, H, W)
+
+    warped = arr[indices[0], indices[1]]
+
+    out_path = OUTPUT_DIR / f"{Path(input_path).stem}_warp_scipy.png"
+    Image.fromarray(warped).save(out_path)
+    print(f"[+]  warp (SciPy) → {out_path}")
+    return str(out_path)
+
+
+def distance_warp_torch(input_path: str, iterations: int = 18) -> str:
+    """
+    warp using Torch grid_sample (from the 4th slide idea).
+    This tends to look 'smoother' and more elastic than the direct index remap.
+
+    Requires: numpy + scipy + torch + pillow
+    """
+    if not (HAS_PIL and HAS_NUMPY and HAS_SCIPY and HAS_TORCH):
+        missing = []
+        if not HAS_PIL:
+            missing.append("pillow")
+        if not HAS_NUMPY:
+            missing.append("numpy")
+        if not HAS_SCIPY:
+            missing.append("scipy")
+        if not HAS_TORCH:
+            missing.append("torch")
+        print(f"[!]  torch-warp needs: {', '.join(missing)}")
+        return ""
+
+    img = Image.open(input_path).convert("RGB")
+    arr = np.array(img)
+
+    image_mean = arr.mean(axis=-1)
+    global_mean = float(image_mean.mean())
+    binary = np.where(image_mean > global_mean, 0, 1).astype(np.uint8)
+
+    # More aggressive in Torch example
+    binary = ndimage.binary_dilation(binary, iterations=iterations)
+
+    indices = ndimage.distance_transform_edt(binary, return_indices=True)[1]  # (2, H, W)
+
+    # Normalize indices → [-1, 1] for grid_sample
+    idx0 = indices[0].astype("float32")
+    idx1 = indices[1].astype("float32")
+    idx0 = np.interp(idx0, (idx0.min(), idx0.max()), (-1.0, 1.0)).astype("float32")
+    idx1 = np.interp(idx1, (idx1.min(), idx1.max()), (-1.0, 1.0)).astype("float32")
+
+    # grid_sample expects grid shape (N, H, W, 2) with (x, y)
+    grid = np.stack([idx1, idx0], axis=-1)  # x = col, y = row
+    grid_t = torch.tensor(grid).unsqueeze(0)  # (1, H, W, 2)
+
+    img_t = torch.tensor((arr / 255.0).astype("float32")).permute(2, 0, 1).unsqueeze(0)  # (1, 3, H, W)
+
+    warped_t = grid_sample(img_t, grid_t, mode="bilinear", padding_mode="border", align_corners=True)
+    warped = (warped_t.squeeze(0).permute(1, 2, 0).numpy() * 255.0).clip(0, 255).astype("uint8")
+
+    out_path = OUTPUT_DIR / f"{Path(input_path).stem}_warp_torch.png"
+    Image.fromarray(warped).save(out_path)
+    print(f"[+] warp (Torch) → {out_path}")
+    return str(out_path)
+
+
+def warp_batch(paths):
+    if not paths:
+        print("[!] No files selected.")
+        return
+
+    print("\n=== Warp ===")
+    print("  1. SciPy distance-warp (chunky / harsh)")
+    print("  2. Torch grid-sample warp (smoother / elastic)")
+    method = input("Choose (1-2) [1]: ").strip() or "1"
+
+    if method == "1":
+        it = ask_int("Closing iterations", 8, 1, 64)
+        for p in paths:
+            distance_warp_scipy(p, iterations=it)
+    elif method == "2":
+        it = ask_int("Dilation iterations", 18, 1, 64)
+        for p in paths:
+            distance_warp_torch(p, iterations=it)
+    else:
+        print("[!] Invalid choice.")
+        return
 
 def derive_fernet_from_passphrase(passphrase: str) -> "Fernet":
     """
@@ -780,10 +927,145 @@ def advanced_x265_glitch(input_path: Path):
         pass
 
 
+# ----------------- VIDEO GLITCHES ----------------- #
+
+# Shared state so the 'Displace' module can prompt once and reuse.
+_DISPLACE_MAP_PATH = None
+_DISPLACE_SIZE = None
+_DISPLACE_FPS = None
+
+
+def advanced_h264_noise_corrupt(input_path: str):
+    """
+     'glitchy but viewable' H.264 corruption via bitstream filter noise
+    + forced keyframe cadence (keyint/keyint_min) + bframes=0.
+
+    This is *not* a visual filter; it intentionally destabilizes decoding in controlled ways.
+    """
+    in_path = Path(input_path)
+    if not in_path.exists():
+        print(f"[!] File not found: {input_path}")
+        return
+
+    print("\n=== H264 Noise Corruption ===")
+    keyint = ask_int("Keyframe interval (keyint)", 10, 1, 10000)
+    keyint_min = ask_int("Keyint min (keyint_min)", keyint, 1, 10000)
+
+    print("\nNoise expression:")
+    print("  1. BASE*not(key)   (hits non-keyframes harder)")
+    print("  2. Timed window    if(between(tb*n, start, end), A, B)")
+    expr_mode = input("Choose (1-2) [1]: ").strip() or "1"
+
+    if expr_mode == "1":
+        base = ask_int("BASE amount", 3000, 0, 500000)
+        noise_expr = f"{base}*not(key)"
+    else:
+        start = ask_float("Window start (seconds)", 5.0, 0.0, 99999.0)
+        end = ask_float("Window end (seconds)", 10.0, 0.0, 99999.0)
+        a = ask_int("A (inside window)", 300, 0, 500000)
+        b = ask_int("B (outside window)", 11000, 0, 500000)
+        # ffmpeg needs commas escaped if you paste into some shells; here we keep it simple.
+        noise_expr = rf"if(between(tb*n\,{start}\,{end}),{a},{b})"
+
+    use_output_corrupt = (input("Use -flags output_corrupt? (y/N): ").strip().lower() == "y")
+
+    temp_path = OUTPUT_DIR / f"{in_path.stem}_corrupted.mp4"
+    out_path = OUTPUT_DIR / f"{in_path.stem}_glitchy_but_viewable.mp4"
+
+    cmd1 = ["ffmpeg", "-y"]
+    if use_output_corrupt:
+        cmd1 += ["-flags", "output_corrupt"]
+    cmd1 += [
+        "-i", str(in_path),
+        "-c:v", "libx264",
+        "-x264-params", f"keyint={keyint}:keyint_min={keyint_min}:bframes=0",
+        "-bsf:v", f"noise=amount='{noise_expr}'",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "copy",
+        str(temp_path),
+    ]
+    print(f"\n[+] Corrupting bitstream → {temp_path}")
+    run_cmd(cmd1)
+
+    # Second pass: re-encode (safer playback in picky players)
+    cmd2 = [
+        "ffmpeg", "-y",
+        "-i", str(temp_path),
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "copy",
+        str(out_path),
+    ]
+    print(f"[+] Making 'viewable' copy → {out_path}")
+    run_cmd(cmd2)
+
+    try:
+        os.remove(temp_path)
+    except OSError:
+        pass
+
+
+def advanced_displace(input_path: str):
+    """
+    displacement glitch using ffmpeg's `displace` filter:
+      base video = input_path
+      map video  = prompted once (second input)
+      map is split into two streams to serve as X/Y maps.
+
+    Inspired by: [0][1][2]displace pipeline in the screenshot.
+    """
+    global _DISPLACE_MAP_PATH, _DISPLACE_SIZE, _DISPLACE_FPS
+
+    in_path = Path(input_path)
+    if not in_path.exists():
+        print(f"[!] File not found: {input_path}")
+        return
+
+    if _DISPLACE_MAP_PATH is None:
+        _DISPLACE_MAP_PATH = input("[?] Path to displacement map video (input2): ").strip()
+        if not _DISPLACE_MAP_PATH:
+            print("[!] No map provided.")
+            _DISPLACE_MAP_PATH = None
+            return
+        if not Path(_DISPLACE_MAP_PATH).exists():
+            print(f"[!] Map not found: {_DISPLACE_MAP_PATH}")
+            _DISPLACE_MAP_PATH = None
+            return
+
+    if _DISPLACE_SIZE is None:
+        _DISPLACE_SIZE = ask_int("Scale size (square)", 256, 64, 4096)
+    if _DISPLACE_FPS is None:
+        _DISPLACE_FPS = ask_int("FPS", 30, 1, 240)
+
+    out_path = OUTPUT_DIR / f"{in_path.stem}_displace.mp4"
+    w = h = _DISPLACE_SIZE
+    fps = _DISPLACE_FPS
+
+    filter_complex = (
+        f"[0:v]scale={w}x{h},format=rgb24,fps={fps}[base];"
+        f"[1:v]scale={w}x{h},format=rgb24,fps={fps},split=2[mx][my];"
+        f"[base][mx][my]displace"
+    )
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(in_path),
+        "-i", str(_DISPLACE_MAP_PATH),
+        "-filter_complex", filter_complex,
+        "-shortest",
+        "-pix_fmt", "yuv420p",
+        str(out_path),
+    ]
+    print(f"\n[+] Displace glitch → {out_path}")
+    run_cmd(cmd)
+
+
 ADVANCED_VIDEO_MODULES = {
     "1": ("Datascope overlay + blend", advanced_datascope),
     "2": ("Snow codec corruption", advanced_snow_codec),
     "3": ("X265 block/slice glitch", advanced_x265_glitch),
+    "4": ("H264 noise corruption (glitchy but viewable)", advanced_h264_noise_corrupt),
+    "5": ("Displace warp (video + map video)", advanced_displace),
 }
 
 
@@ -1409,7 +1691,8 @@ def mode_single_or_batch(single: bool):
         print("  2. GlitchArt databending (JPEG/PNG corruption)")
         print("  3. Text / ASCII overlay")
         print("  4. Hex / byte-level databending (raw corruption)")
-        imode = input("Choice (1-4): ").strip() or "1"
+        print("  5. Distance-map / Grid warp")
+        imode = input("Choice (1-5): ").strip() or "1"
 
         if imode == "1":
             chain = interactive_build_image_filter_chain()
@@ -1423,6 +1706,8 @@ def mode_single_or_batch(single: bool):
             text_overlay_batch(paths, media_type="image")
         elif imode == "4":
             hex_databending_batch(paths)
+        elif imode == "5":
+            warp_batch(paths)
         else:
             print("[!] Invalid image mode.")
             return
