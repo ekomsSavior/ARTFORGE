@@ -322,6 +322,9 @@ freeze
 heat
 hardoverlay
 harmonic
+negation
+extremity
+geometric
 ```
 
 ---
