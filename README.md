@@ -510,12 +510,12 @@ The stego mode continues this philosophy by treating digital art as a carrier fo
 
 * **ffmpeg** for being the backbone of modern video and audio manipulation
   [https://github.com/FFmpeg](https://github.com/FFmpeg)
+* **Kazz Coyote** (Instagram) Glitch art extrodionare
 * **Glitchart Collective (Instagram)** for maintaining culture, tools, and databending methodology
 * Merlyn Alexander – [https://merlynalexander.name/guides/glitch-primer-part-i/](https://merlynalexander.name/guides/glitch-primer-part-i/)
 
 ![Screenshot 2025-10-14 111008\_glitch](https://github.com/user-attachments/assets/a8f5fb93-a80a-427c-b16b-6166a571c8df)
 
 <img width="676" height="1272" alt="E5727FEE-3F86-4B45-ABDB-2FB67CADEAA7_vstack" src="https://github.com/user-attachments/assets/06631b38-93af-4fc5-92cf-c969d443a259" />
-```
 
 
