@@ -18,6 +18,7 @@ ARTFORGE combines multiple glitch disciplines into a single framework:
 * video soundtrack injection
 * media blending, stacking, and grid compositions
 * steganographic encrypted messages embedded inside images
+* distance-warp / grid-warp style image deformation (SciPy + optional Torch)
 
 Its goal is to give creators a modern, accessible, maximal glitch toolkit that respects the aesthetics of both traditional databending and contemporary video glitch processes.
 
@@ -35,6 +36,9 @@ Its goal is to give creators a modern, accessible, maximal glitch toolkit that r
 * Text and ASCII overlays
 * Batch processing support
 * Stego mode for embedding encrypted messages into images
+* Warp mode (distance-map / grid-warp deformation):
+  * SciPy distance-warp (chunky / harsh)
+  * Torch grid-sample warp (smoother / elastic)
 
 ### Video Glitching
 
@@ -42,7 +46,6 @@ https://github.com/user-attachments/assets/269f092f-6426-40b9-872f-cc5ff43db5c9
 
 * Standard ffmpeg glitch chains (same logic as images, extended for video)
 * Advanced codec-based glitching:
-
   * Datascope overlays
   * Snow codec corruption
   * x265 block/slice glitching
@@ -73,18 +76,16 @@ https://github.com/user-attachments/assets/269f092f-6426-40b9-872f-cc5ff43db5c9
 
 ## Requirements
 
-### System dependencies
+### System dependencies (Linux)
 
-ARTFORGE relies heavily on `ffmpeg`.
-Install it on Linux:
+ARTFORGE relies heavily on `ffmpeg`:
 
 ```bash
 sudo apt update
-sudo apt install ffmpeg
-pip3 install torch --index-url https://download.pytorch.org/whl/cpu --break-system-packages
+sudo apt install -y ffmpeg
 ````
 
-Confirm installation:
+Confirm:
 
 ```bash
 ffmpeg -version
@@ -92,21 +93,38 @@ ffmpeg -version
 
 ### Python dependencies
 
-Required for core glitch features:
+Core (enables databending modes):
 
 ```bash
-pip3 install glitchart
+pip3 install glitchart --break-system-packages
 ```
 
-Optional, for specific modes:
+Optional (Stego / Encrypted messages menu):
 
 ```bash
-# For steganography / encrypted messages:
-pip3 install cryptography pillow
+pip3 install cryptography pillow --break-system-packages
 ```
 
-ARTFORGE will still run without `glitchart`, but databending modes for PNG/JPEG will be disabled.
-Stego mode will be disabled unless both `cryptography` and `pillow` are installed.
+Optional (Warp mode — SciPy distance-warp):
+
+```bash
+pip3 install numpy scipy pillow --break-system-packages
+```
+
+Optional (Warp mode — Torch grid-sample warp, smoother / elastic)
+
+This is a big install (VMs need disk space). CPU wheels:
+
+```bash
+pip3 install torch --index-url https://download.pytorch.org/whl/cpu --break-system-packages
+```
+
+Notes:
+
+* ARTFORGE will still run without `glitchart`, but PNG/JPEG databending modes will be disabled.
+* Stego mode is disabled unless both `cryptography` and `pillow` are installed.
+* Warp mode (SciPy) requires `numpy`, `scipy`, and `pillow`.
+* Warp mode (Torch) additionally requires `torch`.
 
 ---
 
@@ -140,6 +158,7 @@ ARTFORGE presents a simple text-based menu to explore:
 * Glitching single or multiple files
 * Combining / meshing media
 * Audio / music integrations
+* Warp deformation mode (inside Image modes)
 * Stego / encrypted message workflows
 * Exit
 
@@ -188,6 +207,27 @@ Performs actual file corruption:
 * Randomly corrupt selected byte ranges deeper in the file
 * Fully preserves the original image
 * Creates a new corrupted output in `output/`
+
+#### E. Distance-Warp / Grid-Warp (Warp Mode)
+
+A deformation mode that remaps pixels using distance transforms.
+
+Two variants:
+
+* **SciPy distance-warp (chunky / harsh)**
+
+  * Generates a binary mask by comparing pixel luminance vs global mean
+  * Applies morphological closing for blob smoothing
+  * Uses `distance_transform_edt(return_indices=True)` to remap pixels
+  * Prompt: `Closing iterations` (higher = chunkier)
+
+* **Torch grid-sample warp (smoother / elastic)**
+
+  * Uses the same mask + distance transform idea
+  * Builds a normalized sampling grid and warps with `torch.grid_sample`
+  * Prompt: `Dilation iterations` (higher = more aggressive warping)
+
+If Torch isn’t installed, the Torch warp option will warn and return to menu.
 
 ---
 
@@ -274,8 +314,6 @@ For stacking and grids, all inputs are scaled to shared target dimensions before
 
 When the tool asks for a “blend mode”, users may type any of the following ffmpeg modes:
 
----
-
 | Blend Mode       | Visual Description                                           |
 | ---------------- | ------------------------------------------------------------ |
 | **addition**     | Adds pixel values; brightens; glow effects.                  |
@@ -309,8 +347,6 @@ When the tool asks for a “blend mode”, users may type any of the following f
 | **subtract**     | Strong dark subtractive effect; negative-space distortions.  |
 | **vividlight**   | Extreme highlight/shadow contrast; aggressive glitch mode.   |
 | **xor**          | Boolean XOR; corrupted bitmap-style glitching.               |
-
----
 
 For users who want chaos:
 
@@ -384,7 +420,7 @@ This is not code execution. It is a local, passphrase-based secret channel for a
 ### Requirements
 
 ```bash
-pip3 install cryptography pillow
+pip3 install cryptography pillow --break-system-packages
 ```
 
 ### Embedding a Hidden Message
@@ -400,13 +436,6 @@ From the main menu:
    * Load the message from a text file
 5. Enter a passphrase (this is what you share with the recipient)
 6. ARTFORGE writes a new image into the `output/` directory, suffixed with `_stego.png`
-
-You can share:
-
-* The resulting `_stego.png`
-* The passphrase
-
-Only someone with both can decode the message.
 
 ### Decoding a Hidden Message
 
@@ -448,6 +477,8 @@ Each file is suffix-tagged depending on the mode used, for example:
 * `_with_music`
 * `_musicvid`
 * `_audio_reactive`
+* `_warp_scipy.png`
+* `_warp_torch.png`
 * `_stego.png`
 * `_stego_message.txt`
 
@@ -469,12 +500,10 @@ The stego mode continues this philosophy by treating digital art as a carrier fo
 
 * **ffmpeg** for being the backbone of modern video and audio manipulation
   [https://github.com/FFmpeg](https://github.com/FFmpeg)
-* **Kazz Coyote (Instagram)** for inspiration, glitch artistry, and community influence
 * **Glitchart Collective (Instagram)** for maintaining culture, tools, and databending methodology
 * Merlyn Alexander – [https://merlynalexander.name/guides/glitch-primer-part-i/](https://merlynalexander.name/guides/glitch-primer-part-i/)
 
 ![Screenshot 2025-10-14 111008\_glitch](https://github.com/user-attachments/assets/a8f5fb93-a80a-427c-b16b-6166a571c8df)
 
 <img width="676" height="1272" alt="E5727FEE-3F86-4B45-ABDB-2FB67CADEAA7_vstack" src="https://github.com/user-attachments/assets/06631b38-93af-4fc5-92cf-c969d443a259" />
-
-
+```
