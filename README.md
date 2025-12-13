@@ -29,6 +29,10 @@ Its goal is to give creators a modern, accessible, maximal glitch toolkit that r
 ### Image Glitching
 
 ![Screenshot_2025-08-29_10_52_12_blend_xor](https://github.com/user-attachments/assets/5408ea0a-8b2c-4e76-b009-4fce1a45bd53)
+<img width="534" height="640" alt="lfg_warp_scipy" src="https://github.com/user-attachments/assets/f96698e2-fc11-4e3f-b01c-1f484f31ba87" />
+
+
+
 
 * Chainable ffmpeg glitch effects (RGB shift, pixelation, noise, neon hue shifts, edge detection)
 * GlitchArt library databending for PNG and JPEG
