@@ -1,3 +1,5 @@
+import { recordingFormats } from "./export.mjs";
+import { createLayerEditor } from "./layer-editor.mjs";
 import { generateSource } from "./sources.mjs";
 import {
   DEFAULTS,
@@ -38,6 +40,7 @@ let mediaUrl = null,
   mediaLoadId = 0,
   audioLoadId = 0,
   recording = null,
+  finalizing = false,
   recordTimer = null,
   toastTimer = null;
 let soundContext = null,
@@ -266,11 +269,11 @@ function resizePreview() {
   const ratio = Math.min(1, 960 / Math.max(sourceWidth, sourceHeight));
   canvas.width = sourceCanvas.width = Math.max(
     1,
-    Math.round(sourceWidth * ratio),
+    Math.round((sourceWidth * ratio) / 2) * 2,
   );
   canvas.height = sourceCanvas.height = Math.max(
     1,
-    Math.round(sourceHeight * ratio),
+    Math.round((sourceHeight * ratio) / 2) * 2,
   );
   sourcePixels = null;
   previous = null;
@@ -298,6 +301,7 @@ function draw(forceTime = null) {
   if (!sourcePixels || kind === "video") updateSource();
   if (comparing) {
     ctx.putImageData(sourcePixels, 0, 0);
+    $("layerSelection").hidden = true;
     return;
   }
   const time = forceTime ?? elapsed,
@@ -319,9 +323,14 @@ function draw(forceTime = null) {
         );
   }
   ctx.putImageData(new ImageData(result, canvas.width, canvas.height), 0, 0);
-  drawSpam(ctx, canvas.width, canvas.height, recipe, time, customOverlay);
-  if (playing)
-    previous = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  if (playing) previous = new Uint8ClampedArray(result);
+  const signal = document.createElement("canvas");
+  signal.width = canvas.width;
+  signal.height = canvas.height;
+  signal.getContext("2d").drawImage(canvas, 0, 0);
+  layerEditor.renderBase(ctx, signal, recipe.seed, time);
+  layerEditor.render(ctx, recipe, time, customOverlay);
+  layerEditor.updateSelection();
   const level = Math.min(8, Math.round(energy * 8));
   $("audioMeter").textContent = "▇".repeat(level) + "▁".repeat(8 - level);
 }
@@ -732,7 +741,7 @@ $("saveRecipe").onclick = () => {
   toast(
     customOverlay
       ? "Recipe saved. Reimport your custom overlay image when loading it."
-      : "Recipe saved. Load it here or in the terminal.",
+      : "Signal recipe saved. Use SAVE LAYERS to also keep text, images and layer blends.",
   );
 };
 async function readRecipe(file) {
@@ -749,6 +758,35 @@ $("loadRecipe").onclick = () => $("recipeInput").click();
 $("recipeInput").onchange = (e) => {
   if (e.target.files[0]) readRecipe(e.target.files[0]);
   e.target.value = "";
+};
+$("convertPhone").onclick = () => $("convertInput").click();
+$("convertInput").onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  if (recording || finalizing) {
+    toast("Finish the current export first.");
+    return;
+  }
+  if (file.size > 200000000) {
+    toast("For videos above 200 MB, use the terminal convert command.");
+    return;
+  }
+  const button = $("convertPhone");
+  button.disabled = true;
+  try {
+    const { phoneMp4 } = await import("./phone-export.mjs");
+    const result = await phoneMp4(file, (p) => {
+      button.textContent = `CONVERTING / ${Math.round(p * 100)}%`;
+    });
+    download(result, file.name.replace(/\.[^.]+$/, "") + "-phone.mp4");
+    toast("Converted to phone MP4. Your original file is untouched.");
+  } catch (e) {
+    toast("Conversion failed: " + e.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = "CONVERT AN OLD DOWNLOAD TO MP4";
+  }
 };
 $("audioBtn").onclick = () => $("audioInput").click();
 $("audioInput").onchange = async (e) => {
@@ -825,7 +863,12 @@ $("exportPng").onclick = async () => {
           ),
         );
         d.putImageData(pixels, 0, 0);
-        drawSpam(d, out.width, out.height, recipe, elapsed, customOverlay);
+        const signal = document.createElement("canvas");
+        signal.width = out.width;
+        signal.height = out.height;
+        signal.getContext("2d").drawImage(out, 0, 0);
+        layerEditor.renderBase(d, signal, recipe.seed, elapsed);
+        layerEditor.render(d, recipe, elapsed, customOverlay);
       }
     }
     const blob = await new Promise((resolve) =>
@@ -841,23 +884,35 @@ $("exportPng").onclick = async () => {
     btn.disabled = false;
   }
 };
-const mimeTypes = [
-  "video/webm;codecs=vp9,opus",
-  "video/webm;codecs=vp8,opus",
-  "video/webm",
-  "video/mp4",
-];
-const recordingType =
-  typeof MediaRecorder !== "undefined"
-    ? mimeTypes.find((t) => MediaRecorder.isTypeSupported(t))
-    : null;
-if (!recordingType || !canvas.captureStream) {
-  $("record").disabled = true;
-  $("recordFormat").textContent = "RECORDING NOT SUPPORTED";
-} else
-  $("recordFormat").textContent =
-    `${recordingType.includes("mp4") ? "MP4" : "WEBM"} / 24 FPS`;
+const formats = recordingFormats(
+  (t) =>
+    typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t),
+);
+const canMakeMp4 =
+  !!formats.mp4 || (typeof VideoEncoder !== "undefined" && !!formats.webm);
+let recordingType = formats.mp4 || formats.webm;
+$("videoFormat").value = canMakeMp4 ? "mp4" : "webm";
+$("videoFormat").querySelector('[value="mp4"]').disabled = !canMakeMp4;
+$("videoFormat").querySelector('[value="webm"]').disabled = !formats.webm;
+function updateRecordingFormat() {
+  recordingType =
+    $("videoFormat").value === "mp4"
+      ? formats.mp4 || formats.webm
+      : formats.webm;
+  $("record").disabled = !recordingType || !canvas.captureStream;
+  $("recordFormat").textContent = recordingType
+    ? $("videoFormat").value === "mp4"
+      ? "MP4 / H.264 + AAC"
+      : "WEBM / BROWSER VIDEO"
+    : "RECORDING NOT SUPPORTED";
+  $("formatHelp").textContent = canMakeMp4
+    ? "MP4 packages H.264 video and AAC audio for phones. Encoding finishes locally after recording; keep this tab open."
+    : "This browser cannot encode H.264 MP4. WebM may not play in your phone gallery. Open the studio in a current Chrome, Edge or Safari with MP4 recording support, or convert locally with the terminal command in the field guide.";
+}
+$("videoFormat").onchange = updateRecordingFormat;
+updateRecordingFormat();
 function lockRecording(lock) {
+  layerEditor.updateSelection();
   for (const id of [
     "importBtn",
     "demoBtn",
@@ -868,6 +923,7 @@ function lockRecording(lock) {
     "setIn",
     "setOut",
     "recordDuration",
+    "videoFormat",
     "seek",
     "play",
     "overlayBtn",
@@ -876,6 +932,7 @@ function lockRecording(lock) {
     $(id).disabled = lock;
 }
 $("record").onclick = async () => {
+  if (finalizing) return;
   if (recording) {
     stopRecord();
     return;
@@ -905,6 +962,8 @@ $("record").onclick = async () => {
     if ((audioUrl || kind === "video") && mixDestination)
       for (const track of mixDestination.stream.getAudioTracks())
         stream.addTrack(track.clone());
+    const wantMp4 = $("videoFormat").value === "mp4";
+    if (wantMp4) import("./phone-export.mjs").catch(() => {});
     const recorder = new MediaRecorder(stream, {
       mimeType: recordingType,
       videoBitsPerSecond: 6000000,
@@ -915,22 +974,51 @@ $("record").onclick = async () => {
     recorder.ondataavailable = (e) => {
       if (e.data.size) chunks.push(e.data);
     };
-    recorder.onstop = () => {
+    recorder.onstop = async () => {
       clearInterval(recordTimer);
       stream.getTracks().forEach((t) => t.stop());
       recording = null;
-      lockRecording(false);
+      finalizing = true;
+      $("record").disabled = true;
       $("record").classList.remove("recording");
-      $("record").innerHTML = "RECORD LOOP <span>↗</span>";
       setPlaying(false);
-      if (chunks.length) {
+      const raw = new Blob(chunks, { type: recorder.mimeType });
+      try {
+        if (!chunks.length)
+          throw new Error("The browser produced no recording.");
+        let result = raw;
+        if (wantMp4) {
+          $("record").textContent = "PACKAGING MP4…";
+          const { phoneMp4 } = await import("./phone-export.mjs");
+          result = await phoneMp4(raw, (p) => {
+            $("record").textContent = `PACKAGING / ${Math.round(p * 100)}%`;
+          });
+        }
         download(
-          new Blob(chunks, { type: recorder.mimeType }),
-          `artforge-loop-${recipe.seed}.${recorder.mimeType.includes("mp4") ? "mp4" : "webm"}`,
+          result,
+          `artforge-loop-${recipe.seed}.${wantMp4 ? "mp4" : "webm"}`,
         );
-        toast("Loop exported with the active soundtrack.");
-      } else toast("The browser produced no recording. Try a shorter loop.");
-      updateTransport();
+        toast(
+          wantMp4
+            ? "Phone MP4 exported: H.264 video + AAC audio."
+            : "WebM exported. Some phone galleries need MP4 instead.",
+        );
+      } catch (e) {
+        if (chunks.length)
+          download(
+            raw,
+            `artforge-recovery-${recipe.seed}.${recorder.mimeType.includes("mp4") ? "mp4" : "webm"}`,
+          );
+        toast(
+          `MP4 packaging failed: ${e.message} Your raw recording was saved for recovery.`,
+        );
+      } finally {
+        finalizing = false;
+        lockRecording(false);
+        updateRecordingFormat();
+        $("record").innerHTML = "RECORD LOOP <span>↗</span>";
+        updateTransport();
+      }
     };
     recorder.onerror = () => {
       toast("Recording failed in this browser.");
@@ -1004,6 +1092,86 @@ window.addEventListener("beforeunload", () => {
   if (audioUrl) URL.revokeObjectURL(audioUrl);
   if (overlayUrl) URL.revokeObjectURL(overlayUrl);
 });
+const layerEditor = createLayerEditor({
+  canvas,
+  onChange: () => {
+    previous = null;
+    draw();
+  },
+  toast,
+  getRecipe: () => recipe,
+  isRecording: () => !!recording || comparing,
+  getFrame: () => {
+    const c = document.createElement("canvas");
+    c.width = canvas.width;
+    c.height = canvas.height;
+    c.getContext("2d").drawImage(media, 0, 0, c.width, c.height);
+    return c;
+  },
+});
+$("editSpamLayer").onclick = () => layerEditor.selectSpam();
+$("saveProject").onclick = () => {
+  const project = layerEditor.exportProject();
+  if (customOverlay) {
+    const c = document.createElement("canvas"),
+      scale = Math.min(
+        1,
+        1920 / Math.max(customOverlay.width, customOverlay.height),
+      );
+    c.width = Math.round(customOverlay.width * scale);
+    c.height = Math.round(customOverlay.height * scale);
+    c.getContext("2d").drawImage(customOverlay, 0, 0, c.width, c.height);
+    project.spamAsset = c.toDataURL("image/png");
+  }
+  download(
+    new Blob([JSON.stringify(project)], { type: "application/json" }),
+    `artforge-layers-${recipe.seed}.json`,
+  );
+  toast(
+    "Layers saved, including text and overlay images. Keep your base media and soundtrack too.",
+  );
+};
+$("loadProject").onclick = () => $("projectInput").click();
+$("projectInput").onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    if (file.size > 64000000) throw new Error("Layer file exceeds 64 MB.");
+    const data = JSON.parse(await file.text()),
+      next = validateRecipe(data.recipe);
+    let spamImage = null;
+    if (data.spamAsset) {
+      if (
+        typeof data.spamAsset !== "string" ||
+        !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(
+          data.spamAsset,
+        ) ||
+        data.spamAsset.length > 12000000
+      )
+        throw new Error("Invalid spam image.");
+      spamImage = new Image();
+      spamImage.src = data.spamAsset;
+      await spamImage.decode();
+    }
+    await layerEditor.importProject(data);
+    if (overlayUrl) URL.revokeObjectURL(overlayUrl);
+    overlayUrl = null;
+    overlayLoadId++;
+    customOverlay = spamImage;
+    $("overlayName").textContent = spamImage
+      ? "Embedded spam image"
+      : "Or replicate your own image / screenshot.";
+    $("clearOverlay").hidden = !spamImage;
+    setRecipe(next);
+    toast(
+      "Layer composition loaded. Import its base image/video and soundtrack separately.",
+    );
+  } catch (e) {
+    toast("Cannot load layers: " + e.message);
+  }
+};
 loadDemo();
 setRecipe(recipe, "ghost-machine");
+document.fonts.ready.then(() => draw());
 requestAnimationFrame(tick);

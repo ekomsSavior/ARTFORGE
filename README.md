@@ -4,7 +4,7 @@ Advanced Glitch Art Framework for Images, Video, Audio, and Databending
 
 ## New: Browser Studio + Mutation Lab
 
-**[Launch the public ARTFORGE Studio](https://artforge-studio-ek0ms.ekoms1.chatgpt.site)**
+**[Launch the public ARTFORGE Studio](https://artforge.ek0mssavi0r.dev)**
 
 A black, gray, white, and chrome workspace for photos, screenshots, artwork,
 video, loops, and old-internet popup chaos. No media upload or render account
@@ -34,7 +34,21 @@ HTTP/HTTPS; ES modules do not run reliably from a `file://` URL.
   a digital effect, not actual hardware circuit bending.
 - **Spamware:** built-in popup messages, up to 12 of your own messages, or your
   own uploaded image/screenshot. Set 1–20 replicas, motion speed, and drift,
-  orbit, or bounce paths. These are graphics inside the canvas.
+  orbit, bounce, snake, horizontal-line, or vertical-line paths. These are graphics inside the canvas.
+- **Layers & type:** up to 16 text, imported-image, frozen-frame, and glitch-module
+  layers. Drag to place, resize from the corner, rotate, reorder, duplicate, or hide.
+  Text supports multiline content, five fonts, color, size, alignment, bold, italic,
+  underline, outline and shadow. Static overlays remain pinned over video; animated
+  paths are optional.
+- **Independent layer styling:** opacity and 24 blend modes (including burn,
+  dodge, vivid/pin/hard light, hard mix, subtract/divide and HSL modes), plus
+  brightness, contrast, saturation, hue, blur, inversion and spatial glitch filters.
+  The built-in spam swarm has the same opacity/blend/filter controls. Module layers
+  process everything underneath them; the original signal chain retains temporal echo.
+- **Save Layers / Load Layers** keeps text, placements, styling, module recipes,
+  and embedded image/spam assets. Base images/videos, soundtrack and loop markers
+  remain separate. Overlay images are stored at up to 1920px; layer project files
+  are browser-only, while signal recipes also work in the terminal.
 - Animate still images, set video loop in/out points, and preview loops.
 - Use a video's soundtrack or add music; audio reactivity drives tearing and
   channel separation. An imported soundtrack replaces video audio.
@@ -44,7 +58,9 @@ HTTP/HTTPS; ES modules do not run reliably from a `file://` URL.
 
 **Browser export limits:** stills up to 2560px on their longest edge; preview
 and recorded loops up to 960px. Recordings run in real time at a target 24 FPS
-and use WebM (VP9/VP8 + Opus), or MP4 if that is the browser's supported format.
+and default to H.264 MP4 with AAC-LC audio for phone playback.
+WebM (VP9/VP8 + Opus) remains selectable. Browsers without an available H.264 encoder
+clearly show WebM-only availability; WebM may not play in phone galleries.
 Actual frame rate depends on your device. Stay on the tab during recording;
 hiding it stops and saves the recording. A single recording is capped at 60
 seconds. Animated GIF imports are treated as image sources; use video for
@@ -52,6 +68,21 @@ precise frame timing. Preview-size PNG captures temporal feedback; source-size
 PNG renders spatial effects and overlays at the current time without accumulated
 feedback. Recipes store controls, seed, and popup text, not media, soundtrack,
 loop markers, or custom image files. Reimport those assets when loading a recipe.
+
+The browser also includes **Convert an old download to MP4**, which converts
+existing WebM/MP4 files locally to H.264 + AAC without applying new effects.
+MP4 packaging uses bundled Mediabunny and its AAC encoder; no media is uploaded.
+
+### Convert an older WebM download for your phone
+
+```bash
+python3 artforge.py convert artforge-loop.webm
+# Writes artforge-loop-phone.mp4; requires FFmpeg, keeps the original untouched.
+```
+
+This exports H.264 baseline, yuv420p, AAC stereo, a maximum 1280px edge and
+fast-start metadata. Existing output files are refused. You can choose a new
+filename with `--output new-name.mp4`.
 
 ### Use the same creative controls from the terminal
 
@@ -655,3 +686,12 @@ The stego mode continues this philosophy by treating digital art as a carrier fo
 <img width="676" height="1272" alt="E5727FEE-3F86-4B45-ABDB-2FB67CADEAA7_vstack" src="https://github.com/user-attachments/assets/06631b38-93af-4fc5-92cf-c969d443a259" />
 
 
+
+## Browser media dependencies
+
+The studio remains buildless: checked-in `web/vendor/` modules work with the
+Python server or any static host. For maintainers, `npm ci && npm run vendor`
+reproduces the pinned Mediabunny 1.66.0 and AAC encoder 1.66.0 modules. Their MPL
+licenses, source files, AAC build instructions, and FFmpeg LGPL notices are
+included under `web/vendor/`. Upstream: https://github.com/Vanilagy/mediabunny.
+The custom blend formulas follow https://www.w3.org/TR/compositing-1/#blending.

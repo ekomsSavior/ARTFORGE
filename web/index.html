@@ -14,6 +14,9 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' fill='%23111'/%3E%3Cpath d='M5 32 17 8h9l9 24h-8l-2-6H15l-3 6zm13-12h5l-2-7z' fill='silver'/%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="style.css" />
+    <script type="importmap">
+      { "imports": { "mediabunny": "./vendor/mediabunny.mjs" } }
+    </script>
     <script type="module" src="app.mjs"></script>
   </head>
   <body>
@@ -25,7 +28,7 @@
             fill="currentColor"
           />
           <path d="M1 19h34v3H1z" fill="#111" /></svg
-        >ARTFORGE<span class="version">STUDIO / 01</span></a
+        >ARTFORGE<span class="version">STUDIO / 02</span></a
       >
       <div class="header-right">
         <span class="local-badge"><i></i> LOCAL PROCESSING</span
@@ -273,8 +276,24 @@
               <option value="15">15 seconds</option>
               <option value="30">30 seconds</option>
             </select></label
-          ><span id="recordFormat">WEBM / 24 FPS</span>
+          ><label
+            >FORMAT<select id="videoFormat">
+              <option value="mp4">MP4 / phone compatible</option>
+              <option value="webm">WebM / browser</option>
+            </select></label
+          ><span id="recordFormat">CHECKING VIDEO SUPPORT</span>
         </div>
+        <p id="formatHelp" class="format-help"></p>
+        <div class="convert-row">
+          <button id="convertPhone">CONVERT AN OLD DOWNLOAD TO MP4</button
+          ><input
+            type="file"
+            id="convertInput"
+            accept="video/*,.webm,.mp4"
+            hidden
+          />
+        </div>
+        <section id="layerEditor" aria-label="Layer editor"></section>
       </section>
       <aside class="right-panel">
         <div class="section-head">
@@ -317,7 +336,13 @@
             <option value="0">DRIFT / SCATTER</option>
             <option value="1">ORBIT / SWARM</option>
             <option value="2">BOUNCE / DVD</option>
+            <option value="3">SNAKE / WAVE TRAIN</option>
+            <option value="4">LINE / HORIZONTAL</option>
+            <option value="5">LINE / VERTICAL</option>
           </select>
+          <button id="editSpamLayer" class="spam-layer-link">
+            SPAM OPACITY / BLEND / FILTERS
+          </button>
         </details>
         <div class="chain-footer">
           NO UPLOADS. NO ACCOUNTS TO RENDER.<br />JUST YOU AND THE BROKEN
@@ -352,10 +377,18 @@
         </li>
         <li>
           <strong>Make it move.</strong> Press Space. Set loop in/out points.
-          Popup replicas can drift, orbit, or bounce. Write your own popup
-          messages or import an image to replicate. Recipes save custom
-          messages; reimport your custom overlay image separately. Temporal echo
-          blends previous frames while playing.
+          Popup replicas can drift, orbit, bounce, snake, or travel in straight
+          lines. Write your own popup messages or import an image to replicate.
+          Recipes save custom messages; reimport your custom overlay image
+          separately. Temporal echo blends previous frames while playing.
+        </li>
+        <li>
+          <strong>Build depth.</strong> Add text, image, frozen-frame, or
+          glitch-module layers. Drag text/images on the canvas and resize with
+          the corner handle, or use position and size controls. Each layer has
+          opacity, 24 blend modes, and its own filters. Text stays static over
+          video unless you choose a motion path. Save Layers keeps text, images,
+          and styling; import the base media and audio separately.
         </li>
         <li>
           <strong>Feed it sound.</strong> Import audio or use a video's
@@ -364,8 +397,10 @@
         </li>
         <li>
           <strong>Keep what you make.</strong> Export a PNG or record a loop in
-          real time. Recordings include the selected soundtrack when browser
-          support allows. Stay on this tab while recording.
+          real time. MP4/H.264 is selected by default when supported for phone
+          playback. WebM remains optional. Recordings include the selected
+          soundtrack when browser support allows. Stay on this tab while
+          recording.
         </li>
       </ol>
       <p>
@@ -378,6 +413,11 @@
         <code>python3 artforge.py forge photo.png --recipe recipe.json</code>.
         Image effects share the same recipe engine; video uses FFmpeg
         interpretations of those controls. Fonts and feedback can differ.
+      </p>
+      <p>
+        Have an older WebM download? Convert it without re-editing:
+        <code>python3 artforge.py convert artforge-loop.webm</code>. This makes
+        an H.264/AAC MP4 with mobile-friendly playback metadata.
       </p>
       <div class="key-guide">
         <span><kbd>SPACE</kbd> PLAY / PAUSE</span

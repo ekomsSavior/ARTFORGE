@@ -13,7 +13,7 @@ export const LIMITS = Object.freeze({
   spam: [0, 100, 0],
   replicas: [1, 20, 6],
   motion: [0, 100, 30],
-  path: [0, 2, 0],
+  path: [0, 5, 0],
   sync: [0, 100, 0],
   solarize: [0, 100, 0],
 });
@@ -418,6 +418,26 @@ export function popupLayout(width, height, recipe, time = 0) {
     } else if (path === 1) {
       x += (Math.cos(t * 2 + i) - Math.cos(i)) * width * 0.17;
       y += (Math.sin(t * 2 + i) - Math.sin(i)) * height * 0.17;
+    } else if (path === 3) {
+      x =
+        ((((t * width * 0.23 - i * width * 0.15) % (width + w)) + width + w) %
+          (width + w)) -
+        w / 2;
+      y = (height - h) / 2 + Math.sin(t * 3 - i * 0.65) * (height - h) * 0.35;
+    } else if (path === 4) {
+      x =
+        ((((t * width * 0.3 - i * width * 0.18) % (width + w)) + width + w) %
+          (width + w)) -
+        w / 2;
+      y = (height - h) / 2;
+    } else if (path === 5) {
+      x = (width - w) / 2;
+      y =
+        ((((t * height * 0.3 - i * height * 0.18) % (height + h)) +
+          height +
+          h) %
+          (height + h)) -
+        h / 2;
     } else {
       const bounce = (v, max) =>
         max - Math.abs((((v % (max * 2)) + max * 2) % (max * 2)) - max);

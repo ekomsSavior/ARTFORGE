@@ -1418,3 +1418,234 @@ dialog code {
     font-size: 9px;
   }
 }
+/* Layers are editing controls; selection chrome never enters exported pixels. */
+#layerEditor {
+  border-top: 1px solid #444;
+  background: #181818;
+}
+.layer-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #333;
+  flex-wrap: wrap;
+}
+.layer-toolbar button {
+  flex: 1;
+  font: 9px var(--mono);
+  padding: 10px 6px;
+  background: linear-gradient(#444, #222);
+  white-space: nowrap;
+}
+.layer-workspace {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(170px, 1.2fr);
+  gap: 16px;
+  padding: 16px;
+}
+.layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.layer-row {
+  display: flex;
+  min-width: 0;
+  gap: 3px;
+}
+.layer-row button {
+  font: 8px var(--mono);
+  padding: 9px 7px;
+}
+.layer-row .layer-select {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  min-width: 0;
+}
+.layer-select[aria-pressed="true"] {
+  color: #111;
+  background: var(--silver);
+  border-color: #eee;
+}
+.layer-row button[aria-pressed="false"]:not(.layer-select) {
+  color: #777;
+}
+.layer-actions,
+.layer-project {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 12px;
+}
+.layer-actions button,
+.layer-project button {
+  font: 7px var(--mono);
+  padding: 8px 5px;
+  flex: 1;
+}
+.layer-hint,
+.layer-help {
+  font: 9px/1.7 var(--mono);
+  color: #999;
+}
+.layer-help {
+  margin: 0;
+  padding: 0 16px 16px;
+}
+.layer-inspector label {
+  display: block;
+  font: 8px var(--mono);
+  color: #aaa;
+  margin: 0 0 12px;
+  min-width: 0;
+}
+.layer-inspector input:not([type="checkbox"]),
+.layer-inspector select,
+.layer-inspector textarea {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  min-width: 0;
+  font: 10px var(--mono);
+}
+.layer-inspector input[type="number"],
+.layer-inspector input[type="text"],
+#layerName,
+.layer-inspector textarea {
+  background: #111;
+  color: #ddd;
+  border: 1px solid #444;
+  padding: 7px;
+}
+.layer-inspector textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+.layer-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.type-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.type-toggles label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.layer-inspector input[type="color"] {
+  height: 32px;
+  padding: 2px;
+  background: #222;
+  border: 1px solid #555;
+}
+.layer-slider output {
+  float: right;
+  color: #eee;
+}
+.layer-filters {
+  margin-top: 14px;
+  border-top: 1px solid #444;
+  padding-top: 12px;
+}
+.layer-filters summary {
+  font: 9px var(--mono);
+  cursor: pointer;
+  margin-bottom: 15px;
+}
+.layer-filters button {
+  font: 8px var(--mono);
+  padding: 9px;
+  width: 100%;
+}
+.layer-selection {
+  position: absolute;
+  pointer-events: none;
+  border: 1px dashed #fff;
+  box-shadow: 0 0 0 1px #000;
+  z-index: 3;
+}
+.layer-selection[hidden] {
+  display: none;
+}
+#resizeLayer {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 15px;
+  height: 15px;
+  background: #eee;
+  border: 2px solid #111;
+  pointer-events: auto;
+  cursor: nwse-resize;
+  padding: 0;
+  touch-action: none;
+}
+#canvas {
+  touch-action: none;
+}
+.spam-layer-link {
+  display: block;
+  margin: 15px 16px 0;
+  width: calc(100% - 32px);
+  font: 8px var(--mono);
+  padding: 10px;
+}
+.layer-inspector [hidden] {
+  display: none;
+}
+.workbench {
+  position: static;
+}
+@media (min-width: 1200px) {
+  .layer-workspace {
+    grid-template-columns: minmax(145px, 1fr) minmax(220px, 1.3fr);
+  }
+}
+@media (max-width: 580px) {
+  .layer-workspace {
+    grid-template-columns: 1fr;
+  }
+  .layer-list {
+    max-height: 220px;
+    overflow: auto;
+  }
+  .layer-inspector {
+    padding-top: 14px;
+    border-top: 1px solid #333;
+  }
+  .layer-toolbar button {
+    font-size: 8px;
+  }
+  .layer-actions button,
+  .layer-project button {
+    font-size: 9px;
+  }
+}
+.format-help {
+  font: 9px/1.6 var(--mono);
+  color: #aaa;
+  padding: 0 17px 17px;
+  margin: 0;
+}
+@media (min-width: 851px) {
+  .stage {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+}
+.convert-row {
+  padding: 0 17px 17px;
+}
+.convert-row button {
+  font: 8px var(--mono);
+  padding: 10px;
+  width: 100%;
+}

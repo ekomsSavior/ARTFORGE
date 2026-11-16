@@ -31,7 +31,7 @@ LIMITS = {
     "spam": (0, 100, 0),
     "replicas": (1, 20, 6),
     "motion": (0, 100, 30),
-    "path": (0, 2, 0),
+    "path": (0, 5, 0),
     "sync": (0, 100, 0),
     "solarize": (0, 100, 0),
 }
@@ -385,6 +385,15 @@ def popup_layout(width, height, recipe, time=0):
         elif p["path"] == 1:
             x += (math.cos(t * 2 + i) - math.cos(i)) * width * 0.17
             y += (math.sin(t * 2 + i) - math.sin(i)) * height * 0.17
+        elif p["path"] == 3:
+            x = (t * width * 0.23 - i * width * 0.15) % (width + w) - w / 2
+            y = (height - h) / 2 + math.sin(t * 3 - i * 0.65) * (height - h) * 0.35
+        elif p["path"] == 4:
+            x = (t * width * 0.3 - i * width * 0.18) % (width + w) - w / 2
+            y = (height - h) / 2
+        elif p["path"] == 5:
+            x = (width - w) / 2
+            y = (t * height * 0.3 - i * height * 0.18) % (height + h) - h / 2
         else:
             bounce = lambda v, maximum: maximum - abs(v % (maximum * 2) - maximum)
             x, y = bounce(x + t * width * 0.3, width - w), bounce(
@@ -593,6 +602,15 @@ def video_filters(recipe, width, height, text_files=None):
             elif p["path"] == 1:
                 xe = f"{x}+(cos(t*{speed*2:.4f}+{i})-cos({i}))*w*.17"
                 ye = f"{y}+(sin(t*{speed*2:.4f}+{i})-sin({i}))*h*.17"
+            elif p["path"] == 3:
+                xe = f"mod(t*w*{speed*.23:.4f}-{i}*w*.15+(w+tw)*100,w+tw)-tw/2"
+                ye = f"(h-th)/2+sin(t*{speed*3:.4f}-{i}*.65)*(h-th)*.35"
+            elif p["path"] == 4:
+                xe = f"mod(t*w*{speed*.3:.4f}-{i}*w*.18+(w+tw)*100,w+tw)-tw/2"
+                ye = "(h-th)/2"
+            elif p["path"] == 5:
+                xe = "(w-tw)/2"
+                ye = f"mod(t*h*{speed*.3:.4f}-{i}*h*.18+(h+th)*100,h+th)-th/2"
             else:
                 xe = f"(w-tw)-abs(mod({max(0,x)}+t*w*{speed*.3:.4f},2*(w-tw))-(w-tw))"
                 ye = f"(h-th)-abs(mod({max(0,y)}+t*h*{speed*.22:.4f},2*(h-th))-(h-th))"
@@ -699,6 +717,15 @@ def render_video(
                 elif recipe["params"]["path"] == 1:
                     xe = f"{x}+(cos(t*{speed*2:.4f}+{i})-cos({i}))*main_w*.17"
                     ye = f"{y}+(sin(t*{speed*2:.4f}+{i})-sin({i}))*main_h*.17"
+                elif recipe["params"]["path"] == 3:
+                    xe = f"mod(t*main_w*{speed*.23:.4f}-{i}*main_w*.15+(main_w+overlay_w)*100,main_w+overlay_w)-overlay_w/2"
+                    ye = f"(main_h-overlay_h)/2+sin(t*{speed*3:.4f}-{i}*.65)*(main_h-overlay_h)*.35"
+                elif recipe["params"]["path"] == 4:
+                    xe = f"mod(t*main_w*{speed*.3:.4f}-{i}*main_w*.18+(main_w+overlay_w)*100,main_w+overlay_w)-overlay_w/2"
+                    ye = "(main_h-overlay_h)/2"
+                elif recipe["params"]["path"] == 5:
+                    xe = "(main_w-overlay_w)/2"
+                    ye = f"mod(t*main_h*{speed*.3:.4f}-{i}*main_h*.18+(main_h+overlay_h)*100,main_h+overlay_h)-overlay_h/2"
                 else:
                     xe = f"(main_w-overlay_w)-abs(mod({max(0,x)}+t*main_w*{speed*.3:.4f},2*(main_w-overlay_w))-(main_w-overlay_w))"
                     ye = f"(main_h-overlay_h)-abs(mod({max(0,y)}+t*main_h*{speed*.22:.4f},2*(main_h-overlay_h))-(main_h-overlay_h))"
@@ -909,12 +936,86 @@ def forge(args):
     return 1 if failures else 0
 
 
+def convert_for_phone(source, output=None):
+    """Convert existing downloads to H.264/AAC MP4 without changing the source."""
+    source = Path(source).expanduser().resolve()
+    output = (
+        Path(output).expanduser().resolve()
+        if output
+        else source.with_name(source.stem + "-phone.mp4")
+    )
+    if not source.is_file():
+        raise ValueError(f"Source not found: {source}")
+    if output.suffix.lower() != ".mp4":
+        raise ValueError("Phone video output must end in .mp4.")
+    if output.exists():
+        raise ValueError(f"Output already exists: {output}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix=".artforge-convert-", dir=output.parent
+    ) as temporary:
+        staged = Path(temporary) / "phone.mp4"
+        command = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-n",
+            "-i",
+            str(source),
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a:0?",
+            "-vf",
+            "scale=1280:1280:force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p",
+            "-r",
+            "30",
+            "-c:v",
+            "libx264",
+            "-profile:v",
+            "baseline",
+            "-preset",
+            "medium",
+            "-crf",
+            "20",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "160k",
+            "-ac",
+            "2",
+            "-ar",
+            "48000",
+            "-movflags",
+            "+faststart",
+            str(staged),
+        ]
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode:
+            raise ValueError("Video conversion failed: " + result.stderr[-1500:])
+        # Exclusive publication also protects a file created during conversion.
+        import os
+
+        os.link(staged, output)
+    print(f"[+] Phone-compatible MP4: {output}")
+    return output
+
+
 def cli(argv=None):
     parser = argparse.ArgumentParser(
         description="ARTFORGE / Mutation Lab. No arguments opens the classic interactive menu."
     )
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("presets", help="List the ten built-in looks")
+    convert = commands.add_parser(
+        "convert", help="Convert an existing loop/video to phone-friendly H.264/AAC MP4"
+    )
+    convert.add_argument("input", type=Path)
+    convert.add_argument(
+        "--output", type=Path, help="New .mp4 path (default: INPUT-phone.mp4)"
+    )
     commands.add_parser(
         "doctor", help="Check optional media tools without importing them"
     )
@@ -995,6 +1096,9 @@ def cli(argv=None):
     )
     args = parser.parse_args(argv)
     try:
+        if args.command == "convert":
+            convert_for_phone(args.input, args.output)
+            return 0
         if args.command == "presets":
             for key, (name, _) in PRESETS.items():
                 print(f"{key:16} {name}")

@@ -77,7 +77,7 @@ class RecipeTests(unittest.TestCase):
 
     def test_popup_motion_and_replication(self):
         recipe = lab.preset_recipe("spamware")
-        for mode in range(3):
+        for mode in range(6):
             recipe["params"]["path"] = mode
             self.assertEqual(len(lab.popup_layout(960, 720, recipe)), 8)
             self.assertNotEqual(
@@ -94,7 +94,7 @@ class RecipeTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "Node needed for cross-engine checks")
     def test_browser_schema_presets_mutations_and_layout_match(self):
         script = """import {LIMITS,PRESETS,recipeFromPreset,mutate,popupLayout} from './web/recipe.mjs';
-        console.log(JSON.stringify({limits:LIMITS,presets:PRESETS.map(p=>recipeFromPreset(p.id)),mutation:mutate(recipeFromPreset('signal-loss',42),43),layouts:[0,1,2].map(path=>{let r=recipeFromPreset('spamware');r.params.path=path;return popupLayout(960,720,r,2);})}));"""
+        console.log(JSON.stringify({limits:LIMITS,presets:PRESETS.map(p=>recipeFromPreset(p.id)),mutation:mutate(recipeFromPreset('signal-loss',42),43),layouts:[0,1,2,3,4,5].map(path=>{let r=recipeFromPreset('spamware');r.params.path=path;return popupLayout(960,720,r,2);})}));"""
         data = json.loads(
             subprocess.check_output(
                 ["node", "--input-type=module", "-e", script], cwd=ROOT, text=True
@@ -106,7 +106,7 @@ class RecipeTests(unittest.TestCase):
             data["mutation"],
             lab.mutate_recipe(lab.preset_recipe("signal-loss", 42), 43),
         )
-        for mode in range(3):
+        for mode in range(6):
             recipe = lab.preset_recipe("spamware")
             recipe["params"]["path"] = mode
             self.assertEqual(
@@ -303,7 +303,7 @@ class VideoTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(self.source.read_bytes()).hexdigest(), before)
 
     def test_loop_duration_and_motion_paths(self):
-        for mode in range(3):
+        for mode in range(6):
             output = self.root / f"motion-{mode}.mp4"
             recipe = lab.preset_recipe("spamware")
             recipe["params"]["path"] = mode
@@ -340,7 +340,7 @@ class VideoTests(unittest.TestCase):
         )
         overlay = self.root / "overlay.png"
         Image.new("RGBA", (40, 25), (255, 255, 255, 150)).save(overlay)
-        for mode in range(3):
+        for mode in range(6):
             recipe["params"]["path"] = mode
             output = self.root / f"overlay-{mode}.mp4"
             lab.render_video(
@@ -353,6 +353,28 @@ class VideoTests(unittest.TestCase):
             )
             stream, _ = lab.probe(output)
             self.assertEqual(stream["codec_name"], "h264")
+
+    def test_phone_conversion_preserves_input_audio_and_existing_output(self):
+        source = self.source
+        # Test setup supplies an actual audio/video fixture, including odd sizes.
+        out = self.root / "phone.mp4"
+        before = source.read_bytes()
+        lab.convert_for_phone(source, out)
+        stream, metadata = lab.probe(out)
+        self.assertEqual(stream["codec_name"], "h264")
+        self.assertEqual(stream["pix_fmt"], "yuv420p")
+        self.assertEqual(stream["width"] % 2, 0)
+        data = json.loads(
+            subprocess.check_output(
+                ["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(out)],
+                text=True,
+            )
+        )
+        self.assertIn("aac", [x["codec_name"] for x in data["streams"]])
+        with self.assertRaises(ValueError):
+            lab.convert_for_phone(source, out)
+        self.assertEqual(source.read_bytes(), before)
+        self.assertTrue(out.is_file())
 
     def test_existing_output_is_not_overwritten_or_deleted(self):
         output = self.root / "existing.mp4"
