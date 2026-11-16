@@ -1,0 +1,22 @@
+name: Mutation Lab checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  media:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
+      - run: python -m pip install -r requirements-lab.txt
+      - run: python -m unittest discover -s tests -v
+      - run: node --test tests/*.test.mjs
+      - run: node --check web/layers.mjs && node --check web/layer-editor.mjs && node --check web/export.mjs && node --check web/app.mjs && node --check web/recipe.mjs && node --check web/sources.mjs

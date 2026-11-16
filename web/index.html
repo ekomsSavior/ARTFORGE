@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#101010" />
+    <meta
+      name="description"
+      content="ARTFORGE. Turn photos, screenshots and video into broken transmissions. A local-first glitch studio by ek0ms savi0r."
+    />
+    <title>ARTFORGE / Signal corruption studio</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' fill='%23111'/%3E%3Cpath d='M5 32 17 8h9l9 24h-8l-2-6H15l-3 6zm13-12h5l-2-7z' fill='silver'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script type="importmap">
+      { "imports": { "mediabunny": "./vendor/mediabunny.mjs" } }
+    </script>
+    <script type="module" src="app.mjs"></script>
+  </head>
+  <body>
+    <header class="masthead">
+      <a class="brand" href="./" aria-label="ARTFORGE home"
+        ><svg viewBox="0 0 36 36" aria-hidden="true">
+          <path
+            d="M2 30 14 5h9l11 25h-9l-2-6H13l-3 6zm14-13h5l-2-7z"
+            fill="currentColor"
+          />
+          <path d="M1 19h34v3H1z" fill="#111" /></svg
+        >ARTFORGE<span class="version">STUDIO / 02</span></a
+      >
+      <div class="header-right">
+        <span class="local-badge"><i></i> LOCAL PROCESSING</span
+        ><button id="helpBtn" class="text-button">
+          FIELD GUIDE <span>↗</span></button
+        ><a
+          href="https://github.com/ekomsSavior/ARTFORGE"
+          target="_blank"
+          rel="noopener"
+          class="text-button"
+          >TERMINAL <span>↗</span></a
+        >
+      </div>
+    </header>
+    <section class="intro">
+      <div>
+        <p class="eyebrow">INDEPENDENT SIGNAL CORRUPTION LAB</p>
+        <h1>MAKE IT <span class="chrome-text">BREAK.</span></h1>
+      </div>
+      <p class="intro-copy">
+        Your art. A beautiful malfunction.<br />Images, video, feedback &
+        corrupted memories.
+      </p>
+    </section>
+    <main class="studio">
+      <aside class="left-panel">
+        <div class="section-head">
+          <span>01 / SOURCE</span><span class="tiny">LOCAL ONLY</span>
+        </div>
+        <button id="importBtn" class="import-box">
+          <span class="plus">+</span><strong>DROP YOUR MEDIA</strong
+          ><span>Photos / screenshots / video</span
+          ><span class="file-types">PNG · JPG · WEBP · GIF · MP4 · WEBM</span>
+        </button>
+        <input id="mediaInput" type="file" accept="image/*,video/*" hidden />
+        <div class="source-info">
+          <span id="sourceName">SIGNAL_GARDEN / DEMO</span
+          ><button
+            id="demoBtn"
+            title="Load the built-in demo"
+            aria-label="Load demo"
+          >
+            ↺
+          </button>
+        </div>
+        <div class="generators">
+          <span>OR GENERATE A SIGNAL</span>
+          <div>
+            <button data-source="memory">BYTES</button
+            ><button data-source="circuit">CIRCUIT</button
+            ><button data-source="boot">BOOT</button>
+          </div>
+        </div>
+        <div class="section-head preset-heading">
+          <span>02 / MUTATIONS</span><span class="tiny">10 LOADED</span>
+        </div>
+        <div class="stack-mode">
+          <label><input id="stackMode" type="checkbox" /> STACK PRESETS</label
+          ><span
+            title="Combine controls. The last selected preset sets any shared controls."
+            >SHARED CONTROLS / LAST WINS</span
+          >
+        </div>
+        <div
+          id="presets"
+          class="presets"
+          role="group"
+          aria-label="Glitch presets"
+        ></div>
+        <button id="mutateBtn" class="mutate-button">
+          <span>↯</span> MUTATE THIS SIGNAL <kbd>M</kbd>
+        </button>
+        <div class="seed-row">
+          <label for="seed">SEED</label
+          ><input
+            id="seed"
+            type="number"
+            min="0"
+            max="2147483647"
+            step="1"
+            value="404"
+          /><button
+            id="randomSeed"
+            aria-label="Randomize seed"
+            title="New random seed"
+          >
+            ↻
+          </button>
+        </div>
+        <div class="recipe-actions">
+          <button id="saveRecipe">SAVE RECIPE ↓</button
+          ><button id="loadRecipe">LOAD RECIPE ↑</button>
+        </div>
+        <input
+          id="recipeInput"
+          type="file"
+          accept=".json,application/json"
+          hidden
+        />
+      </aside>
+      <section class="workbench" aria-label="Media preview">
+        <div class="canvas-top">
+          <div>
+            <span class="status-dot"></span
+            ><strong id="lookName">SIGNAL LOSS</strong
+            ><span id="editedLabel"></span>
+          </div>
+          <div class="canvas-tools">
+            <button
+              id="compare"
+              aria-pressed="false"
+              title="Toggle original (C)"
+            >
+              A/B <span>ORIGINAL</span></button
+            ><button
+              id="fullscreen"
+              aria-label="Toggle fullscreen preview"
+              title="Fullscreen"
+            >
+              ⛶
+            </button>
+          </div>
+        </div>
+        <div
+          id="stage"
+          class="stage"
+          tabindex="0"
+          aria-label="Artwork preview. Drop an image or video here."
+        >
+          <div class="corner tl"></div>
+          <div class="corner tr"></div>
+          <div class="corner bl"></div>
+          <div class="corner br"></div>
+          <canvas
+            id="canvas"
+            width="960"
+            height="720"
+            aria-label="Glitched artwork preview"
+          ></canvas>
+          <div class="stage-note">
+            <span id="dimensions">960 × 720</span
+            ><span id="renderState">STILL / PAUSED</span>
+          </div>
+          <div id="dropOverlay" class="drop-overlay">DROP TO CORRUPT</div>
+        </div>
+        <div class="transport">
+          <button
+            id="play"
+            class="play-button"
+            aria-label="Play animation"
+            aria-pressed="false"
+          >
+            ▶</button
+          ><span id="timeReadout">00:00.0</span
+          ><input
+            id="seek"
+            aria-label="Loop position"
+            type="range"
+            min="0"
+            max="8"
+            step="0.01"
+            value="0"
+          /><span id="durationReadout">00:08.0</span
+          ><span class="loop-label">↻ LOOP</span>
+        </div>
+        <div class="loop-settings">
+          <label
+            >IN
+            <input
+              id="loopIn"
+              type="number"
+              min="0"
+              step="0.1"
+              value="0"
+              aria-label="Loop in point in seconds" /></label
+          ><label
+            >OUT
+            <input
+              id="loopOut"
+              type="number"
+              min="0.1"
+              step="0.1"
+              max="600"
+              value="8"
+              aria-label="Loop out point in seconds" /></label
+          ><button id="setIn">SET IN</button><button id="setOut">SET OUT</button
+          ><span>SECONDS</span>
+        </div>
+        <div class="audio-strip">
+          <div class="audio-heading">
+            <span class="audio-icon" aria-hidden="true">▂▅▃▇▂</span>
+            <div>
+              <strong>AUDIO REACTIVITY</strong
+              ><span id="audioLabel"
+                >Add a soundtrack. Let the signal follow.</span
+              >
+            </div>
+          </div>
+          <button id="audioBtn">+ AUDIO</button
+          ><button id="clearAudio" hidden aria-label="Remove soundtrack">
+            ×
+          </button>
+        </div>
+        <input id="audioInput" type="file" accept="audio/*" hidden />
+        <div class="audio-options">
+          <label><input id="reactive" type="checkbox" /> REACT TO SOUND</label
+          ><label
+            >GAIN
+            <input
+              id="audioGain"
+              aria-label="Audio reactivity gain"
+              type="range"
+              min="0"
+              max="3"
+              step="0.1"
+              value="1.2" /></label
+          ><span id="audioMeter" aria-label="Audio level">▁▁▁▁▁▁▁▁</span>
+        </div>
+        <div class="export-bar">
+          <div>
+            <strong>TAKE THE DAMAGE WITH YOU.</strong
+            ><span id="exportNote"
+              >Full-size stills. Motion loops. Your recipe.</span
+            >
+          </div>
+          <button id="exportPng" class="silver">
+            EXPORT PNG <span>↓</span></button
+          ><button id="record" class="solid">
+            RECORD LOOP <span>↗</span>
+          </button>
+        </div>
+        <div class="export-options">
+          <label
+            >STILL SIZE
+            <select id="exportSize">
+              <option value="source">Source · max 2560px</option>
+              <option value="preview">Preview · max 960px</option>
+            </select></label
+          ><label
+            >RECORD
+            <select id="recordDuration">
+              <option value="loop">One loop · max 60s</option>
+              <option value="4">4 seconds</option>
+              <option value="8">8 seconds</option>
+              <option value="15">15 seconds</option>
+              <option value="30">30 seconds</option>
+            </select></label
+          ><label
+            >FORMAT<select id="videoFormat">
+              <option value="mp4">MP4 / phone compatible</option>
+              <option value="webm">WebM / browser</option>
+            </select></label
+          ><span id="recordFormat">CHECKING VIDEO SUPPORT</span>
+        </div>
+        <p id="formatHelp" class="format-help"></p>
+        <div class="convert-row">
+          <button id="convertPhone">CONVERT AN OLD DOWNLOAD TO MP4</button
+          ><input
+            type="file"
+            id="convertInput"
+            accept="video/*,.webm,.mp4"
+            hidden
+          />
+        </div>
+        <section id="layerEditor" aria-label="Layer editor"></section>
+      </section>
+      <aside class="right-panel">
+        <div class="section-head">
+          <span>03 / SIGNAL CHAIN</span><button id="resetBtn">RESET</button>
+        </div>
+        <div class="chain-note">PUSH IT PAST THE POINT OF REPAIR.</div>
+        <div id="controls"></div>
+        <details class="replication" open>
+          <summary>POPUP REPLICATION <span>+</span></summary>
+          <p>
+            Old internet. New damage. Every window is part of your artwork.
+            Stack with any signal effects.
+          </p>
+          <div id="spamControls"></div>
+          <div class="custom-spam">
+            <label for="spamMessages">YOUR POPUP MESSAGES</label
+            ><textarea
+              id="spamMessages"
+              rows="3"
+              placeholder="One message per line. Leave blank for preset spam."
+              maxlength="972"
+            ></textarea
+            ><button id="applyMessages">APPLY MESSAGES</button>
+            <div class="overlay-buttons">
+              <button id="overlayBtn">+ YOUR SPAM IMAGE</button
+              ><button
+                id="clearOverlay"
+                hidden
+                aria-label="Remove custom spam image"
+              >
+                ×
+              </button>
+            </div>
+            <span id="overlayName"
+              >Or replicate your own image / screenshot.</span
+            ><input id="overlayInput" type="file" accept="image/*" hidden />
+          </div>
+          <label class="path-label" for="motionPath">MOTION PATH</label
+          ><select id="motionPath">
+            <option value="0">DRIFT / SCATTER</option>
+            <option value="1">ORBIT / SWARM</option>
+            <option value="2">BOUNCE / DVD</option>
+            <option value="3">SNAKE / WAVE TRAIN</option>
+            <option value="4">LINE / HORIZONTAL</option>
+            <option value="5">LINE / VERTICAL</option>
+          </select>
+          <button id="editSpamLayer" class="spam-layer-link">
+            SPAM OPACITY / BLEND / FILTERS
+          </button>
+        </details>
+        <div class="chain-footer">
+          NO UPLOADS. NO ACCOUNTS TO RENDER.<br />JUST YOU AND THE BROKEN
+          SIGNAL.
+        </div>
+      </aside>
+    </main>
+    <footer>
+      <span>ARTFORGE © <span id="year">2026</span> / BY EK0MS SAVI0R</span
+      ><span>FOR ARTISTS, HACKERS & GLITCH WITCHES.</span
+      ><button id="shortcuts">KEYS / ?</button>
+    </footer>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <dialog id="guide">
+      <button id="closeGuide" class="close-dialog" aria-label="Close guide">
+        ×
+      </button>
+      <p class="eyebrow">ARTFORGE / FIELD GUIDE</p>
+      <h2>BREAK SOMETHING<br />BEAUTIFUL.</h2>
+      <ol>
+        <li>
+          <strong>Bring your own signal.</strong> Drop a photo, screenshot, or
+          video. Or generate a byte dump, circuit-board diagram, or boot-screen
+          still from your seed. MP4 decoding depends on your browser's codec
+          support. Files stay on your device.
+        </li>
+        <li>
+          <strong>Find the damage.</strong> Choose a mutation, enable Stack
+          presets to combine looks, push the sliders, or press M. Shared
+          controls use the last selected preset. The seed lets you repeat a
+          result.
+        </li>
+        <li>
+          <strong>Make it move.</strong> Press Space. Set loop in/out points.
+          Popup replicas can drift, orbit, bounce, snake, or travel in straight
+          lines. Write your own popup messages or import an image to replicate.
+          Recipes save custom messages; reimport your custom overlay image
+          separately. Temporal echo blends previous frames while playing.
+        </li>
+        <li>
+          <strong>Build depth.</strong> Add text, image, frozen-frame, or
+          glitch-module layers. Drag text/images on the canvas and resize with
+          the corner handle, or use position and size controls. Each layer has
+          opacity, 24 blend modes, and its own filters. Text stays static over
+          video unless you choose a motion path. Save Layers keeps text, images,
+          and styling; import the base media and audio separately.
+        </li>
+        <li>
+          <strong>Feed it sound.</strong> Import audio or use a video's
+          soundtrack. Enable reactivity to drive tearing and channel separation.
+          Added audio replaces the video's audio.
+        </li>
+        <li>
+          <strong>Keep what you make.</strong> Export a PNG or record a loop in
+          real time. MP4/H.264 is selected by default when supported for phone
+          playback. WebM remains optional. Recordings include the selected
+          soundtrack when browser support allows. Stay on this tab while
+          recording.
+        </li>
+      </ol>
+      <p>
+        PNG export is capped at 2560px on the longest edge. Preview and
+        recordings are capped at 960px for responsive effects. Large media stays
+        local; very large images may exceed your browser's memory.
+      </p>
+      <p>
+        Recipes work in the updated terminal tool:
+        <code>python3 artforge.py forge photo.png --recipe recipe.json</code>.
+        Image effects share the same recipe engine; video uses FFmpeg
+        interpretations of those controls. Fonts and feedback can differ.
+      </p>
+      <p>
+        Have an older WebM download? Convert it without re-editing:
+        <code>python3 artforge.py convert artforge-loop.webm</code>. This makes
+        an H.264/AAC MP4 with mobile-friendly playback metadata.
+      </p>
+      <div class="key-guide">
+        <span><kbd>SPACE</kbd> PLAY / PAUSE</span
+        ><span><kbd>M</kbd> MUTATE</span><span><kbd>C</kbd> COMPARE</span
+        ><span><kbd>?</kbd> THIS GUIDE</span>
+      </div>
+    </dialog>
+    <video id="video" playsinline preload="metadata" hidden></video
+    ><audio id="audio" preload="metadata" hidden></audio>
+  </body>
+</html>

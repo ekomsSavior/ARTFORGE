@@ -2,6 +2,173 @@
 
 Advanced Glitch Art Framework for Images, Video, Audio, and Databending
 
+## New: Browser Studio + Mutation Lab
+
+**[Launch the public ARTFORGE Studio](https://artforge.ek0mssavi0r.dev)**
+
+A black, gray, white, and chrome workspace for photos, screenshots, artwork,
+video, loops, and old-internet popup chaos. No media upload or render account
+is required. The browser processes files on your device; all fonts are bundled.
+
+### Open the browser studio locally
+
+```bash
+python3 artforge.py studio
+# Open http://127.0.0.1:8765
+```
+
+The studio binds only to localhost. Use `--port 8767` if the default port is busy.
+No Python image libraries, FFmpeg, Node, or build step are needed to serve it.
+The `web/` folder can also be hosted on any static HTTPS host. Serve it over
+HTTP/HTTPS; ES modules do not run reliably from a `file://` URL.
+
+- Import photos, screenshots, and browser-playable video, including H.264 MP4.
+- Ten presets: **VHS Haunt, Neon Bleed, Pixel Riot, Signal Loss, Acid Bloom,
+  Ghost Machine, Spamware, Bit Rot, Circuit Bent, and CRT Burn**.
+- **Stack presets** to combine their controls. The last selected preset sets
+  any shared controls; all other effects remain in the chain.
+- Fine-tune RGB separation, tearing, grain, pixel crush, scanlines, bit rot,
+  hue, saturation, contrast, color collapse, sync drift, solarization, and temporal feedback.
+- Generate seeded byte dumps, circuit-board diagrams, or boot-screen stills, then
+  glitch or animate them. Circuit Bent emulates unstable camera signals; it is
+  a digital effect, not actual hardware circuit bending.
+- **Spamware:** built-in popup messages, up to 12 of your own messages, or your
+  own uploaded image/screenshot. Set 1–20 replicas, motion speed, and drift,
+  orbit, bounce, snake, horizontal-line, or vertical-line paths. These are graphics inside the canvas.
+- **Layers & type:** up to 16 text, imported-image, frozen-frame, and glitch-module
+  layers. Drag to place, resize from the corner, rotate, reorder, duplicate, or hide.
+  Text supports multiline content, five fonts, color, size, alignment, bold, italic,
+  underline, outline and shadow. Static overlays remain pinned over video; animated
+  paths are optional.
+- **Independent layer styling:** opacity and 24 blend modes (including burn,
+  dodge, vivid/pin/hard light, hard mix, subtract/divide and HSL modes), plus
+  brightness, contrast, saturation, hue, blur, inversion and spatial glitch filters.
+  The built-in spam swarm has the same opacity/blend/filter controls. Module layers
+  process everything underneath them; the original signal chain retains temporal echo.
+- **Save Layers / Load Layers** keeps text, placements, styling, module recipes,
+  and embedded image/spam assets. Base images/videos, soundtrack and loop markers
+  remain separate. Overlay images are stored at up to 1920px; layer project files
+  are browser-only, while signal recipes also work in the terminal.
+- Animate still images, set video loop in/out points, and preview loops.
+- Use a video's soundtrack or add music; audio reactivity drives tearing and
+  channel separation. An imported soundtrack replaces video audio.
+- Compare with the original, export PNG, record/download loops, and save/load
+  JSON recipes. Keyboard shortcuts: **Space** play, **M** mutate, **C** compare,
+  **?** field guide.
+
+**Browser export limits:** stills up to 2560px on their longest edge; preview
+and recorded loops up to 960px. Recordings run in real time at a target 24 FPS
+and default to H.264 MP4 with AAC-LC audio for phone playback.
+WebM (VP9/VP8 + Opus) remains selectable. Browsers without an available H.264 encoder
+clearly show WebM-only availability; WebM may not play in phone galleries.
+Actual frame rate depends on your device. Stay on the tab during recording;
+hiding it stops and saves the recording. A single recording is capped at 60
+seconds. Animated GIF imports are treated as image sources; use video for
+precise frame timing. Preview-size PNG captures temporal feedback; source-size
+PNG renders spatial effects and overlays at the current time without accumulated
+feedback. Recipes store controls, seed, and popup text, not media, soundtrack,
+loop markers, or custom image files. Reimport those assets when loading a recipe.
+
+The browser also includes **Convert an old download to MP4**, which converts
+existing WebM/MP4 files locally to H.264 + AAC without applying new effects.
+MP4 packaging uses bundled Mediabunny and its AAC encoder; no media is uploaded.
+
+### Convert an older WebM download for your phone
+
+```bash
+python3 artforge.py convert artforge-loop.webm
+# Writes artforge-loop-phone.mp4; requires FFmpeg, keeps the original untouched.
+```
+
+This exports H.264 baseline, yuv420p, AAC stereo, a maximum 1280px edge and
+fast-start metadata. Existing output files are refused. You can choose a new
+filename with `--output new-name.mp4`.
+
+### Use the same creative controls from the terminal
+
+The original `python3 artforge.py` menu remains available. Choose **7** for the
+Mutation Lab, browser studio, or dependency check. Existing modes are preserved.
+
+For still-image rendering and contact sheets, install the optional lab stack in
+a virtual environment:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install -r requirements-lab.txt
+python3 artforge.py doctor
+python3 artforge.py presets
+```
+
+Video rendering requires FFmpeg with `libx264` and `drawtext` (the standard
+Ubuntu/Debian build works). Custom image overlays additionally require the lab
+Python dependencies. Font rendering can differ between systems.
+
+```bash
+# Generate your own source material, then glitch it
+python3 artforge.py generate --source circuit --seed 404 --preset circuit-bent
+python3 artforge.py generate --source memory --preset spamware
+
+# Six reproducible variations, recipes, a session manifest, and a contact sheet
+python3 artforge.py forge photo.png --preset bit-rot --seed 404 --variants 6
+
+# Stack several modules, then adjust shared controls
+python3 artforge.py forge photo.png --preset vhs-haunt --preset spamware \
+  --set replicas=12 --set motion=70 --seed 404
+
+# Reuse a browser recipe on one or more files
+python3 artforge.py forge photo.png screenshot.jpg --recipe artforge-404.json
+
+# A still image becomes an eight-second MP4 loop
+python3 artforge.py forge photo.png --preset spamware --loop-seconds 8 \
+  --set path=2 --set replicas=10
+
+# Replicate a custom image over video (path: 0 drift, 1 orbit, 2 bounce)
+python3 artforge.py forge clip.mp4 --preset signal-loss --overlay popup.png \
+  --set replicas=14 --set path=1 --loop-seconds 12
+
+# Your own popup messages; repeat --message to cycle through several
+python3 artforge.py forge photo.png --preset spamware \
+  --message 'MAKE ART NOT SENSE' --message 'MEMORY IS A MATERIAL'
+
+# A five-second segment; source audio is preserved as AAC
+python3 artforge.py forge clip.mp4 --preset neon-bleed --start 2 --duration 5
+```
+
+Each run creates a unique `output/forge-.../` session directory. Every result
+has its own recipe JSON. Batch failures are recorded in `session.json` and
+return a nonzero exit status; completed results remain available. Originals and
+previous sessions are never replaced. Still outputs are PNG; motion outputs
+are H.264 MP4 with even dimensions. `--loop-seconds` loops video inputs or
+animates stills; it takes precedence over `--duration`. `--max-size` controls the
+longest output edge (32–8192, default 2560); `--fps` supports 12/24/25/30/60.
+`--media video` processes an animated GIF as video rather than its first frame.
+
+Browser and Python stills share a seeded spatial algorithm. Video uses native
+FFmpeg interpretations for speed, so its appearance can differ from the browser.
+Popup typography, resizing, audio reactivity, and temporal feedback are not
+pixel-identical across renderers. Recipes are validated data and cannot supply
+arbitrary filter graphs or shell commands. Custom text is rendered literally.
+
+### Development and checks
+
+```bash
+python3 -m unittest discover -s tests -v
+node --check web/app.mjs
+node --check web/recipe.mjs
+node --check web/sources.mjs
+```
+
+The tests exercise browser/Python recipe and pixel parity, seeded replay, batch
+sessions, input validation, all presets on real video, audio preservation,
+image-to-MP4 loops, custom text/images, and all replication motion paths. Node
+is only needed for the cross-engine test. The GitHub Actions workflow installs
+FFmpeg and the image dependencies before running the suite.
+
+---
+
+
+
 ![Screenshot_2025-12-08_18_23_25(2)](https://github.com/user-attachments/assets/6b822049-0f8d-43fb-97e5-1aa1b852fb1d)
 
 ARTFORGE is a multi-tool glitch art engine designed for artists, musicians, and experimental creators who want to transform ordinary media into distorted, data-bent, audio-reactive, and codec-corrupted artworks.
@@ -519,3 +686,12 @@ The stego mode continues this philosophy by treating digital art as a carrier fo
 <img width="676" height="1272" alt="E5727FEE-3F86-4B45-ABDB-2FB67CADEAA7_vstack" src="https://github.com/user-attachments/assets/06631b38-93af-4fc5-92cf-c969d443a259" />
 
 
+
+## Browser media dependencies
+
+The studio remains buildless: checked-in `web/vendor/` modules work with the
+Python server or any static host. For maintainers, `npm ci && npm run vendor`
+reproduces the pinned Mediabunny 1.66.0 and AAC encoder 1.66.0 modules. Their MPL
+licenses, source files, AAC build instructions, and FFmpeg LGPL notices are
+included under `web/vendor/`. Upstream: https://github.com/Vanilagy/mediabunny.
+The custom blend formulas follow https://www.w3.org/TR/compositing-1/#blending.

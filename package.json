@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "@mediabunny/aac-encoder": "1.66.0",
+    "mediabunny": "1.66.0"
+  },
+  "private": true,
+  "scripts": {
+    "vendor": "node scripts/vendor-media.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}
