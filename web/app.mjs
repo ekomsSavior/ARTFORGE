@@ -301,7 +301,7 @@ function draw(forceTime = null) {
   if (!sourcePixels || kind === "video") updateSource();
   if (comparing) {
     ctx.putImageData(sourcePixels, 0, 0);
-    $("layerSelection").hidden = true;
+    layerEditor.updateSelection();
     return;
   }
   const time = forceTime ?? elapsed,

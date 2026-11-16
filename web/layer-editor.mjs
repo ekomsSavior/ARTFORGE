@@ -26,6 +26,7 @@ export function createLayerEditor({
   const state = {
     layers: [],
     selected: "base",
+    editing: false,
     base: { opacity: 100, blend: "normal", filters: { ...FILTER_DEFAULTS } },
     spam: { opacity: 100, blend: "normal", filters: { ...FILTER_DEFAULTS } },
   };
@@ -33,13 +34,34 @@ export function createLayerEditor({
   host.innerHTML = `<div class="section-head"><span>04 / LAYERS & TYPE</span><span class="tiny">COMPOSE THE DAMAGE</span></div>
   <div class="layer-toolbar"><button id="addText">+ TEXT</button><button id="addImage">+ IMAGE</button><button id="freezeFrame">+ FRAME</button><button id="addModule">+ MODULE</button></div>
   <input id="layerImageInput" type="file" accept="image/*" hidden>
-  <div class="layer-workspace"><div><div id="layerList" class="layer-list" role="group" aria-label="Artwork layers"></div><div class="layer-actions"><button id="layerUp" title="Move selected layer forward">FORWARD</button><button id="layerDown" title="Move selected layer backward">BACK</button><button id="duplicateLayer">COPY</button><button id="deleteLayer">DELETE</button></div><p class="layer-hint">Top of the list = front of the artwork.<br>Drag text or images on the canvas. Resize with the corner handle.</p><div class="layer-project"><button id="saveProject">SAVE LAYERS</button><button id="loadProject">LOAD LAYERS</button><input id="projectInput" type="file" accept=".json" hidden></div><p class="layer-hint">Layer files include text and overlay images. Reimport your base video and audio separately.</p></div>
-  <div class="layer-inspector"><label>SELECTED LAYER<input id="layerName" maxlength="80" aria-label="Layer name"></label><label>BLEND MODE<select id="layerBlend">${BLEND_MODES.map((v) => `<option value="${v}">${label(v)}</option>`).join("")}</select></label>
+  <div class="layer-workspace"><div><div id="layerList" class="layer-list" role="group" aria-label="Artwork layers"></div><div class="layer-actions"><button id="layerUp" title="Move selected layer forward">FORWARD</button><button id="layerDown" title="Move selected layer backward">BACK</button><button id="duplicateLayer">COPY</button><button id="deleteLayer">DELETE</button></div><p class="layer-hint">Top of the list = front of the artwork.<br>Drag text or images on the canvas. Resize with the corner handle. Done editing, Escape, or an empty-canvas click hides the handles.</p><div class="layer-project"><button id="saveProject">SAVE LAYERS</button><button id="loadProject">LOAD LAYERS</button><input id="projectInput" type="file" accept=".json" hidden></div><p class="layer-hint">Layer files include text and overlay images. Reimport your base video and audio separately.</p></div>
+  <div class="layer-inspector"><button id="finishLayerInspector" class="done-editing" hidden>DONE EDITING</button><label>SELECTED LAYER<input id="layerName" maxlength="80" aria-label="Layer name"></label><label>BLEND MODE<select id="layerBlend">${BLEND_MODES.map((v) => `<option value="${v}">${label(v)}</option>`).join("")}</select></label>
   <label class="layer-slider">OPACITY <output id="layerOpacityValue"></output><input id="layerOpacity" aria-label="Layer opacity" type="range" min="0" max="100" value="100"></label>
   <div id="textSettings"><label>TEXT<textarea id="layerText" rows="3" maxlength="2000" placeholder="Write your signal"></textarea></label><div class="layer-pair"><label>FONT<select id="layerFont">${FONTS.map((f) => `<option>${f}</option>`).join("")}</select></label><label>INK<input id="layerColor" type="color" value="#ffffff" aria-label="Text color"></label></div><div class="layer-pair"><label>SIZE<input id="layerFontSize" aria-label="Text size" type="number" min="8" max="400" step=".1"></label><label>ALIGN<select id="layerAlign"><option value="left">LEFT</option><option value="center">CENTER</option><option value="right">RIGHT</option></select></label></div><div class="type-toggles"><label><input id="layerBold" type="checkbox">BOLD</label><label><input id="layerItalic" type="checkbox">ITALIC</label><label><input id="layerUnderline" type="checkbox">UNDERLINE</label></div><div class="layer-pair"><label>OUTLINE<input id="layerOutline" aria-label="Text outline" type="range" min="0" max="12"></label><label>SHADOW<input id="layerShadow" aria-label="Text shadow" type="range" min="0" max="40"></label></div></div>
   <div id="moduleSettings"><label>MODULE PRESET<select id="modulePreset"><option value="">CURRENT SIGNAL SNAPSHOT</option>${PRESETS.map((p) => `<option value="${p.id}">${p.name}</option>`).join("")}</select></label><p class="layer-hint">Processes the layers beneath it. Blend and fade each module independently.</p></div>
   <div id="placementSettings"><div class="layer-pair"><label>X %<input id="layerX" aria-label="Layer horizontal position" type="number" min="-100" max="200" step=".1"></label><label>Y %<input id="layerY" aria-label="Layer vertical position" type="number" min="-100" max="200" step=".1"></label></div><div class="layer-pair"><label>WIDTH %<input id="layerWidth" aria-label="Layer width" type="range" min="2" max="200" step=".1"></label><label>ROTATION<input id="layerRotation" aria-label="Layer rotation" type="range" min="-180" max="180"></label></div><label>MOTION<select id="layerMotion"><option value="static">STATIC / PINNED</option><option value="drift">DRIFT</option><option value="orbit">ORBIT</option><option value="bounce">BOUNCE</option><option value="snake">SNAKE</option><option value="horizontal">LINE / HORIZONTAL</option><option value="vertical">LINE / VERTICAL</option></select></label><label>SPEED<input id="layerSpeed" aria-label="Layer motion speed" type="range" min="0" max="100"></label></div>
   <details class="layer-filters"><summary>FILTER THIS LAYER</summary><div id="layerFilters"></div><button id="resetLayerFilters">RESET LAYER FILTERS</button></details></div></div><p class="layer-help">Text and image layers stay pinned by default, including over video. + FRAME captures the current video frame as a movable still. Downloads include all visible layers.</p>`;
+  document
+    .querySelector(".canvas-tools")
+    .insertAdjacentHTML(
+      "afterbegin",
+      '<button id="finishLayerEdit" class="done-editing" title="Finish placing this layer (Escape)" hidden>DONE EDITING</button>',
+    );
+  function finishEditing() {
+    state.editing = false;
+    drag = null;
+    updateSelection();
+  }
+  $("finishLayerEdit").onclick = finishEditing;
+  $("finishLayerInspector").onclick = finishEditing;
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !$("guide").open) {
+      finishEditing();
+    }
+  });
+  $("stage").addEventListener("pointerdown", (e) => {
+    if (e.target === $("stage")) finishEditing();
+  });
   $("stage").insertAdjacentHTML(
     "beforeend",
     '<div id="layerSelection" class="layer-selection" hidden><button id="resizeLayer" aria-label="Resize selected layer" title="Drag to resize"></button></div>',
@@ -63,6 +85,7 @@ export function createLayerEditor({
         : state.layers.find((l) => l.id === state.selected);
   }
   function changed() {
+    state.editing = ["text", "image"].includes(selected()?.type);
     onChange();
     updateSelection();
   }
@@ -101,6 +124,7 @@ export function createLayerEditor({
   }
   function select(id) {
     state.selected = id;
+    state.editing = ["text", "image"].includes(selected()?.type);
     refreshList();
     refreshInspector();
     updateSelection();
@@ -309,7 +333,9 @@ export function createLayerEditor({
   function updateSelection() {
     const box = $("layerSelection"),
       l = selected();
-    box.hidden = !l?.bounds || !l.visible || isRecording();
+    box.hidden = !state.editing || !l?.bounds || !l.visible || isRecording();
+    $("finishLayerEdit").hidden = box.hidden;
+    $("finishLayerInspector").hidden = box.hidden;
     if (box.hidden) return;
     const rect = canvas.getBoundingClientRect(),
       stage = $("stage").getBoundingClientRect(),
@@ -340,7 +366,10 @@ export function createLayerEditor({
             (b.height * rect.height) / 2
         );
       });
-      if (!found) return;
+      if (!found) {
+        finishEditing();
+        return;
+      }
       select(found.id);
     }
     const l = selected();
