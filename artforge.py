@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+import sys
+
+# Non-interactive tools do not need to import the optional scientific stack.
+if __name__ == "__main__" and len(sys.argv) > 1:
+    from artforge_lab import cli
+    sys.exit(cli())
+
 import subprocess
 from pathlib import Path
 import os
@@ -1797,8 +1804,9 @@ For artists, hackers, and glitch witches
         print("  4. Audio / Music tools")
         print("  5. Stego / Encrypted messages")
         print("  6. Exit")
+        print("  7. Mutation Lab / Browser studio / Recipes")
 
-        choice = input("Choice (1-6): ").strip()
+        choice = input("Choice (1-7): ").strip()
 
         if choice == "1":
             mode_single_or_batch(single=True)
@@ -1813,6 +1821,9 @@ For artists, hackers, and glitch witches
         elif choice == "6":
             print("Bye.")
             break
+        elif choice == "7":
+            from artforge_lab import interactive_lab
+            interactive_lab()
         else:
             print("[!] Invalid choice.")
 

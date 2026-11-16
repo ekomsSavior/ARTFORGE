@@ -1,0 +1,3 @@
+# Optional: needed for Mutation Lab still images, contact sheets, and custom image overlays.
+numpy>=1.24
+Pillow>=9.2

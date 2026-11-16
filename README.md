@@ -2,6 +2,142 @@
 
 Advanced Glitch Art Framework for Images, Video, Audio, and Databending
 
+## New: Browser Studio + Mutation Lab
+
+**[Launch the public ARTFORGE Studio](https://artforge-studio-ek0ms.ekoms1.chatgpt.site)**
+
+A black, gray, white, and chrome workspace for photos, screenshots, artwork,
+video, loops, and old-internet popup chaos. No media upload or render account
+is required. The browser processes files on your device; all fonts are bundled.
+
+### Open the browser studio locally
+
+```bash
+python3 artforge.py studio
+# Open http://127.0.0.1:8765
+```
+
+The studio binds only to localhost. Use `--port 8767` if the default port is busy.
+No Python image libraries, FFmpeg, Node, or build step are needed to serve it.
+The `web/` folder can also be hosted on any static HTTPS host. Serve it over
+HTTP/HTTPS; ES modules do not run reliably from a `file://` URL.
+
+- Import photos, screenshots, and browser-playable video, including H.264 MP4.
+- Ten presets: **VHS Haunt, Neon Bleed, Pixel Riot, Signal Loss, Acid Bloom,
+  Ghost Machine, Spamware, Bit Rot, Circuit Bent, and CRT Burn**.
+- **Stack presets** to combine their controls. The last selected preset sets
+  any shared controls; all other effects remain in the chain.
+- Fine-tune RGB separation, tearing, grain, pixel crush, scanlines, bit rot,
+  hue, saturation, contrast, color collapse, sync drift, solarization, and temporal feedback.
+- Generate seeded byte dumps, circuit-board diagrams, or boot-screen stills, then
+  glitch or animate them. Circuit Bent emulates unstable camera signals; it is
+  a digital effect, not actual hardware circuit bending.
+- **Spamware:** built-in popup messages, up to 12 of your own messages, or your
+  own uploaded image/screenshot. Set 1–20 replicas, motion speed, and drift,
+  orbit, or bounce paths. These are graphics inside the canvas.
+- Animate still images, set video loop in/out points, and preview loops.
+- Use a video's soundtrack or add music; audio reactivity drives tearing and
+  channel separation. An imported soundtrack replaces video audio.
+- Compare with the original, export PNG, record/download loops, and save/load
+  JSON recipes. Keyboard shortcuts: **Space** play, **M** mutate, **C** compare,
+  **?** field guide.
+
+**Browser export limits:** stills up to 2560px on their longest edge; preview
+and recorded loops up to 960px. Recordings run in real time at a target 24 FPS
+and use WebM (VP9/VP8 + Opus), or MP4 if that is the browser's supported format.
+Actual frame rate depends on your device. Stay on the tab during recording;
+hiding it stops and saves the recording. A single recording is capped at 60
+seconds. Animated GIF imports are treated as image sources; use video for
+precise frame timing. Preview-size PNG captures temporal feedback; source-size
+PNG renders spatial effects and overlays at the current time without accumulated
+feedback. Recipes store controls, seed, and popup text, not media, soundtrack,
+loop markers, or custom image files. Reimport those assets when loading a recipe.
+
+### Use the same creative controls from the terminal
+
+The original `python3 artforge.py` menu remains available. Choose **7** for the
+Mutation Lab, browser studio, or dependency check. Existing modes are preserved.
+
+For still-image rendering and contact sheets, install the optional lab stack in
+a virtual environment:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install -r requirements-lab.txt
+python3 artforge.py doctor
+python3 artforge.py presets
+```
+
+Video rendering requires FFmpeg with `libx264` and `drawtext` (the standard
+Ubuntu/Debian build works). Custom image overlays additionally require the lab
+Python dependencies. Font rendering can differ between systems.
+
+```bash
+# Generate your own source material, then glitch it
+python3 artforge.py generate --source circuit --seed 404 --preset circuit-bent
+python3 artforge.py generate --source memory --preset spamware
+
+# Six reproducible variations, recipes, a session manifest, and a contact sheet
+python3 artforge.py forge photo.png --preset bit-rot --seed 404 --variants 6
+
+# Stack several modules, then adjust shared controls
+python3 artforge.py forge photo.png --preset vhs-haunt --preset spamware \
+  --set replicas=12 --set motion=70 --seed 404
+
+# Reuse a browser recipe on one or more files
+python3 artforge.py forge photo.png screenshot.jpg --recipe artforge-404.json
+
+# A still image becomes an eight-second MP4 loop
+python3 artforge.py forge photo.png --preset spamware --loop-seconds 8 \
+  --set path=2 --set replicas=10
+
+# Replicate a custom image over video (path: 0 drift, 1 orbit, 2 bounce)
+python3 artforge.py forge clip.mp4 --preset signal-loss --overlay popup.png \
+  --set replicas=14 --set path=1 --loop-seconds 12
+
+# Your own popup messages; repeat --message to cycle through several
+python3 artforge.py forge photo.png --preset spamware \
+  --message 'MAKE ART NOT SENSE' --message 'MEMORY IS A MATERIAL'
+
+# A five-second segment; source audio is preserved as AAC
+python3 artforge.py forge clip.mp4 --preset neon-bleed --start 2 --duration 5
+```
+
+Each run creates a unique `output/forge-.../` session directory. Every result
+has its own recipe JSON. Batch failures are recorded in `session.json` and
+return a nonzero exit status; completed results remain available. Originals and
+previous sessions are never replaced. Still outputs are PNG; motion outputs
+are H.264 MP4 with even dimensions. `--loop-seconds` loops video inputs or
+animates stills; it takes precedence over `--duration`. `--max-size` controls the
+longest output edge (32–8192, default 2560); `--fps` supports 12/24/25/30/60.
+`--media video` processes an animated GIF as video rather than its first frame.
+
+Browser and Python stills share a seeded spatial algorithm. Video uses native
+FFmpeg interpretations for speed, so its appearance can differ from the browser.
+Popup typography, resizing, audio reactivity, and temporal feedback are not
+pixel-identical across renderers. Recipes are validated data and cannot supply
+arbitrary filter graphs or shell commands. Custom text is rendered literally.
+
+### Development and checks
+
+```bash
+python3 -m unittest discover -s tests -v
+node --check web/app.mjs
+node --check web/recipe.mjs
+node --check web/sources.mjs
+```
+
+The tests exercise browser/Python recipe and pixel parity, seeded replay, batch
+sessions, input validation, all presets on real video, audio preservation,
+image-to-MP4 loops, custom text/images, and all replication motion paths. Node
+is only needed for the cross-engine test. The GitHub Actions workflow installs
+FFmpeg and the image dependencies before running the suite.
+
+---
+
+
+
 ![Screenshot_2025-12-08_18_23_25(2)](https://github.com/user-attachments/assets/6b822049-0f8d-43fb-97e5-1aa1b852fb1d)
 
 ARTFORGE is a multi-tool glitch art engine designed for artists, musicians, and experimental creators who want to transform ordinary media into distorted, data-bent, audio-reactive, and codec-corrupted artworks.
