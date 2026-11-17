@@ -21,7 +21,9 @@ Rendering dependencies are pinned and vendored. No third-party runtime CDN, anal
 
 ## Recording reliability
 
-Silent image loops do not initialize audio. Audio startup, seeking, decoding, recorder completion, and MP4 packaging have time limits. Recording stop deadlines are installed before playback starts. A missing recorder stop event releases tracks and recovers available chunks. MP4 packaging can be cancelled; raw recording recovery remains available. A persistent download link provides a manual save action when a browser blocks an automatic download.
+Silent image MP4 loops render every frame through a bundled H.264 WebAssembly encoder in a dedicated worker, without MediaRecorder, native WebCodecs, or GPU encoder support. One frame is in flight at a time; output is capped at 960px, 24 FPS, and 60 seconds. Cancellation terminates the worker, and each encoder operation has a 20-second timeout. The pinned upstream glue uses reviewed static closures in place of dynamic JavaScript generation; CSP still disallows JavaScript eval. Reproduce that bundle with `node scripts/vendor-software-encoder.mjs`.
+
+Video, soundtrack, and WebM recordings use browser capture, preferring VP8 where available. Audio startup, seeking, decoding, recorder completion, and MP4 packaging have time limits. A missing recorder stop event releases tracks. Recovery is offered only after the browser decodes an actual video frame; empty recordings never claim recovered data. MP4 packaging can be cancelled. A persistent download link provides a manual save action when a browser blocks an automatic download.
 
 ## Verification and limits
 

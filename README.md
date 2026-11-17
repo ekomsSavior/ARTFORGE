@@ -57,12 +57,15 @@ HTTP/HTTPS; ES modules do not run reliably from a `file://` URL.
   **?** field guide.
 
 **Browser export limits:** stills up to 2560px on their longest edge; preview
-and recorded loops up to 960px. Recordings run in real time at a target 24 FPS
-and default to H.264 MP4 with AAC-LC audio for phone playback.
-WebM (VP9/VP8 + Opus) remains selectable. Browsers without an available H.264 encoder
-clearly show WebM-only availability; WebM may not play in phone galleries.
-Actual frame rate depends on your device. Stay on the tab during recording;
-hiding it stops and saves the recording. A single recording is capped at 60
+and recorded loops up to 960px. Silent image MP4 loops render frame by frame at
+24 FPS using a bundled software H.264 encoder, including in Firefox without a
+working native encoder. Rendering may take longer than the loop duration; the
+progress indicator and Cancel Export button remain available.
+Video, soundtrack, and WebM recordings run in real time. Phone MP4 conversion
+for those recordings uses native H.264 plus bundled AAC-LC encoding; codec support
+depends on the browser. WebM (VP8/VP9 + Opus) remains selectable but may not play in
+phone galleries. Stay on the tab during live capture; hiding it stops capture.
+A download is offered only when playable frames were captured. Each loop is capped at 60
 seconds. Animated GIF imports are treated as image sources; use video for
 precise frame timing. Preview-size PNG captures temporal feedback; source-size
 PNG renders spatial effects and overlays at the current time without accumulated
@@ -71,7 +74,8 @@ loop markers, or custom image files. Reimport those assets when loading a recipe
 
 The browser also includes **Convert an old download to MP4**, which converts
 existing WebM/MP4 files locally to H.264 + AAC without applying new effects.
-MP4 packaging uses bundled Mediabunny and its AAC encoder; no media is uploaded.
+MP4 packaging uses bundled Mediabunny and its AAC encoder; silent image loops use
+the pinned `h264-mp4-encoder` software worker. No media is uploaded.
 
 ### Convert an older WebM download for your phone
 

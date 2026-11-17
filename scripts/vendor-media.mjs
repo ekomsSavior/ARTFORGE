@@ -1,4 +1,5 @@
 import { mkdir, copyFile, cp, writeFile, readFile } from "node:fs/promises";
+import "./vendor-software-encoder.mjs";
 await mkdir("web/vendor/licenses", { recursive: true });
 for (const [pkg, bundle, target] of [
   ["mediabunny", "mediabunny", "mediabunny"],

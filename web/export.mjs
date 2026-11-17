@@ -6,8 +6,8 @@ export const MP4_TYPES = [
   "video/mp4;codecs=avc1",
 ];
 export const WEBM_TYPES = [
-  "video/webm;codecs=vp9,opus",
   "video/webm;codecs=vp8,opus",
+  "video/webm;codecs=vp9,opus",
   "video/webm",
 ];
 export function recordingFormats(supports) {
@@ -65,10 +65,17 @@ export function captureRecording(
     onTick(0);
     watchdog = timers.setTimeout(() => {
       failure ||= new Error(
-        "Recorder did not finish; recovered available chunks.",
+        chunks.length
+          ? "The browser did not finish the recording. A partial file may be available."
+          : "The browser encoder returned no video data. Nothing was recorded.",
       );
       finish();
     }, 10000);
+    try {
+      if (recorder.state === "recording") recorder.requestData?.();
+    } catch {
+      /* Some engines cannot flush separately; stop must still run. */
+    }
     try {
       if (recorder.state !== "inactive") recorder.stop();
       else finish();

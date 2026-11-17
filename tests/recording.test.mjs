@@ -129,6 +129,20 @@ test("recorder start failure cleans up timers and media tracks", () => {
   assert.equal(f.stopped(), 1);
   assert.equal(f.pending(), 0);
 });
+test("a stalled encoder with zero chunks never claims a file was recovered", async () => {
+  const f = setup({ brokenStop: true });
+  const session = captureRecording(f.recorder, f.stream, {
+    seconds: 8,
+    timers: f.timers,
+    now: f.now,
+  });
+  f.advance(18000);
+  const result = await session.done;
+  assert.equal(result.blob.size, 0);
+  assert.match(result.error.message, /no video data/);
+  assert.doesNotMatch(result.error.message, /recovered/);
+  assert.equal(f.stopped(), 1);
+});
 test("unresolved browser audio/playback promises time out", async () => {
   await assert.rejects(
     withTimeout(new Promise(() => {}), 5, "audio blocked"),

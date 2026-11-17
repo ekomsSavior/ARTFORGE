@@ -1,0 +1,7 @@
+{
+  "package": "h264-mp4-encoder",
+  "version": "1.0.12",
+  "upstream": "https://github.com/TrevorSundberg/h264-mp4-encoder",
+  "upstreamBundleSha256": "db5e45cc1367dc467f876944d9b16eb30f8e984384587c8c00f8d973aff68ce7",
+  "changes": "ES module export; static Emscripten closures; dynamic script shims disabled. Reproduce with scripts/vendor-software-encoder.mjs."
+}

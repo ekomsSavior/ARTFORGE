@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@mediabunny/aac-encoder": "1.66.0",
+    "h264-mp4-encoder": "1.0.12",
     "mediabunny": "1.66.0"
   },
   "private": true,

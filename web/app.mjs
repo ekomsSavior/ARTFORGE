@@ -49,6 +49,7 @@ let mediaUrl = null,
   audioLoadId = 0,
   recording = null,
   finalizing = false,
+  renderingFrames = false,
   startingRecording = false,
   recordSession = null,
   exportAbort = null,
@@ -325,7 +326,7 @@ function draw(forceTime = null) {
     Math.floor(time * 12),
     energy,
   );
-  if (previous && playing && recipe.params.echo) {
+  if (previous && (playing || renderingFrames) && recipe.params.echo) {
     const mix = recipe.params.echo / 100;
     for (let i = 0; i < result.length; i += 4)
       for (let c = 0; c < 3; c++)
@@ -334,7 +335,7 @@ function draw(forceTime = null) {
         );
   }
   ctx.putImageData(new ImageData(result, canvas.width, canvas.height), 0, 0);
-  if (playing) previous = new Uint8ClampedArray(result);
+  if (playing || renderingFrames) previous = new Uint8ClampedArray(result);
   const signal = document.createElement("canvas");
   signal.width = canvas.width;
   signal.height = canvas.height;
@@ -348,11 +349,13 @@ function draw(forceTime = null) {
 function updateTransport() {
   $("seek").value = elapsed;
   $("timeReadout").textContent = formatTime(elapsed);
-  $("renderState").textContent = recording
-    ? "RECORDING / LIVE"
-    : playing
-      ? "LIVE / LOOPING"
-      : "STILL / PAUSED";
+  $("renderState").textContent = renderingFrames
+    ? "RENDERING / MP4"
+    : recording
+      ? "RECORDING / LIVE"
+      : playing
+        ? "LIVE / LOOPING"
+        : "STILL / PAUSED";
 }
 async function setupSound() {
   if (!soundContext) {
@@ -456,6 +459,7 @@ function resetTimeline(duration) {
   $("durationReadout").textContent = formatTime(duration);
   elapsed = 0;
   updateTransport();
+  updateRecordingFormat();
 }
 function updateLoop() {
   let start = Number($("loopIn").value),
@@ -621,7 +625,7 @@ document.addEventListener("drop", (e) => {
   dragDepth = 0;
   $("stage").classList.remove("dragging");
   const file = e.dataTransfer.files[0];
-  if (recording) {
+  if (recording || finalizing || startingRecording) {
     toast("Finish recording before replacing the source.");
     return;
   }
@@ -836,6 +840,7 @@ $("audioInput").onchange = async (e) => {
     $("clearAudio").hidden = false;
     $("reactive").checked = true;
     if (playing) await audio.play();
+    updateRecordingFormat();
     toast("Soundtrack loaded. Reactivity is on.");
   } catch (err) {
     if (token === audioLoadId) {
@@ -857,6 +862,7 @@ function clearAudio() {
       ? "Using video soundtrack, when present."
       : "Add a soundtrack. Let the signal follow.";
   if (videoGain) videoGain.gain.value = 1;
+  updateRecordingFormat();
 }
 $("clearAudio").onclick = clearAudio;
 $("exportPng").onclick = async () => {
@@ -913,8 +919,12 @@ const formats = recordingFormats(
   (t) =>
     typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t),
 );
+const hasSoftwareEncoder =
+  typeof WebAssembly !== "undefined" && typeof Worker !== "undefined";
 const canMakeMp4 =
-  !!formats.mp4 || (typeof VideoEncoder !== "undefined" && !!formats.webm);
+  hasSoftwareEncoder ||
+  !!formats.mp4 ||
+  (typeof VideoEncoder !== "undefined" && !!formats.webm);
 let recordingType = formats.mp4 || formats.webm;
 $("videoFormat").value = canMakeMp4 ? "mp4" : "webm";
 $("videoFormat").querySelector('[value="mp4"]').disabled = !canMakeMp4;
@@ -922,22 +932,48 @@ $("videoFormat").querySelector('[value="webm"]').disabled = !formats.webm;
 function updateRecordingFormat() {
   recordingType =
     $("videoFormat").value === "mp4"
-      ? formats.mp4 || formats.webm
+      ? typeof VideoEncoder !== "undefined"
+        ? formats.webm || formats.mp4
+        : formats.mp4 || formats.webm
       : formats.webm;
-  $("record").disabled = !recordingType || !canvas.captureStream;
-  $("recordFormat").textContent = recordingType
-    ? $("videoFormat").value === "mp4"
-      ? "MP4 / H.264 + AAC"
-      : "WEBM / BROWSER VIDEO"
-    : "RECORDING NOT SUPPORTED";
+  $("record").disabled =
+    (!recordingType || !canvas.captureStream) &&
+    !(
+      kind !== "video" &&
+      !audioUrl &&
+      $("videoFormat").value === "mp4" &&
+      canMakeMp4
+    );
+  $("recordFormat").textContent =
+    recordingType || (hasSoftwareEncoder && kind !== "video" && !audioUrl)
+      ? $("videoFormat").value === "mp4"
+        ? kind !== "video" && !audioUrl && hasSoftwareEncoder
+          ? "MP4 / FRAME BY FRAME"
+          : "MP4 / H.264 + AAC"
+        : "WEBM / BROWSER VIDEO"
+      : "RECORDING NOT SUPPORTED";
   $("formatHelp").textContent = canMakeMp4
-    ? "MP4 packages H.264 video and AAC audio for phones. Encoding finishes locally after recording; keep this tab open."
+    ? "Image MP4 loops render frame by frame, including in Firefox. Rendering may take longer than playback; watch the progress or cancel. Video and soundtrack recordings finish encoding after capture."
     : "This browser cannot encode H.264 MP4. WebM may not play in your phone gallery. Open the studio in a current Chrome, Edge or Safari with MP4 recording support, or convert locally with the terminal command in the field guide.";
 }
 $("videoFormat").onchange = updateRecordingFormat;
 updateRecordingFormat();
+const recordingLocks = new Map();
 function lockRecording(lock) {
   layerEditor.updateSelection();
+  if (lock) {
+    for (const control of document.querySelectorAll(
+      ".studio button, .studio input, .studio select, .studio textarea",
+    )) {
+      if (control.id === "record" || recordingLocks.has(control)) continue;
+      recordingLocks.set(control, control.disabled);
+      control.disabled = true;
+    }
+    return;
+  }
+  for (const [control, wasDisabled] of recordingLocks)
+    control.disabled = wasDisabled;
+  recordingLocks.clear();
   for (const id of [
     "importBtn",
     "demoBtn",
@@ -956,6 +992,57 @@ function lockRecording(lock) {
   ])
     $(id).disabled = lock;
 }
+async function renderImageLoop(seconds, start, end) {
+  finalizing = true;
+  renderingFrames = true;
+  startingRecording = false;
+  exportAbort = new AbortController();
+  $("record").disabled = false;
+  $("record").textContent = "CANCEL EXPORT";
+  $("exportNote").textContent = "Rendering MP4 / 0%";
+  const restoreTime = elapsed;
+  let lastTime = start;
+  try {
+    await setPlaying(false);
+    previous = null;
+    const { softwareMp4 } = await import("./frame-export.mjs");
+    const result = await softwareMp4({
+      canvas,
+      seconds,
+      start,
+      loopEnd: end,
+      signal: exportAbort.signal,
+      renderFrame: (time) => {
+        if (time < lastTime) previous = null;
+        lastTime = elapsed = time;
+        draw(time);
+        updateTransport();
+      },
+      onProgress: (p) => {
+        $("exportNote").textContent = `Rendering MP4 / ${Math.round(p * 100)}%`;
+      },
+    });
+    download(result, `artforge-loop-${recipe.seed}.mp4`);
+    $("exportNote").textContent =
+      "Your MP4 is ready. Use the save link below to download it.";
+    toast("MP4 exported. Every frame rendered and saved.");
+  } catch (error) {
+    $("exportNote").textContent = exportAbort.signal.aborted
+      ? "Export cancelled. Your artwork is unchanged."
+      : `MP4 export failed: ${error.message}`;
+    toast($("exportNote").textContent);
+  } finally {
+    renderingFrames = finalizing = startingRecording = false;
+    exportAbort = null;
+    elapsed = restoreTime;
+    previous = null;
+    lockRecording(false);
+    updateRecordingFormat();
+    $("record").innerHTML = "RECORD LOOP <span>↗</span>";
+    draw();
+    updateTransport();
+  }
+}
 async function finishRecording(session, recorder, wantMp4) {
   const { blob: raw, error } = await session.done;
   if (recordSession !== session) return;
@@ -966,6 +1053,7 @@ async function finishRecording(session, recorder, wantMp4) {
   $("record").disabled = false;
   $("record").classList.remove("recording");
   await setPlaying(false);
+  let rawPlayable = false;
   try {
     if (!raw.size)
       throw (
@@ -974,6 +1062,21 @@ async function finishRecording(session, recorder, wantMp4) {
           "The browser produced no recording. Try again with the studio tab visible.",
         )
       );
+    const probe = document.createElement("video");
+    probe.preload = "auto";
+    const probeUrl = URL.createObjectURL(raw);
+    try {
+      const ready = waitForMedia(probe, "loadeddata");
+      probe.src = probeUrl;
+      await ready;
+      if (!probe.videoWidth || !probe.videoHeight)
+        throw Error("The recording contains no playable video frames.");
+      rawPlayable = true;
+    } finally {
+      probe.removeAttribute("src");
+      probe.load();
+      URL.revokeObjectURL(probeUrl);
+    }
     let result = raw;
     if (wantMp4) {
       $("record").textContent = "CANCEL MP4 EXPORT";
@@ -1000,18 +1103,18 @@ async function finishRecording(session, recorder, wantMp4) {
         : "WebM exported. Use MP4 for phone galleries.",
     );
   } catch (e) {
-    if (raw.size) {
+    if (rawPlayable) {
       download(
         raw,
         `artforge-recovery-${recipe.seed}.${recorder.mimeType.includes("mp4") ? "mp4" : "webm"}`,
       );
       $("exportNote").textContent =
-        "Raw recording recovered. Use the save link below.";
+        "MP4 conversion failed. A playable original recording is available below.";
     } else
       $("exportNote").textContent =
-        "No video was captured. Please retry with the studio tab visible.";
+        "The browser returned no playable video. Image loops can use MP4 frame-by-frame export.";
     toast(
-      `${e.message}${raw.size ? " Your raw recording is available below." : ""}`,
+      `${e.message}${rawPlayable ? " Your original recording is available below." : " Nothing was recovered."}`,
     );
   } finally {
     exportAbort = null;
@@ -1042,6 +1145,15 @@ $("record").onclick = async () => {
   $("record").disabled = true;
   $("record").textContent = "STARTING…";
   lockRecording(true);
+  if (
+    hasSoftwareEncoder &&
+    kind !== "video" &&
+    !audioUrl &&
+    $("videoFormat").value === "mp4"
+  ) {
+    await renderImageLoop(seconds, start, end);
+    return;
+  }
   let stream;
   try {
     // Start audio while the Record click still carries user activation (especially Safari).
@@ -1139,7 +1251,9 @@ document.addEventListener("keydown", (e) => {
     e.metaKey ||
     e.altKey ||
     /INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName) ||
-    $("guide").open
+    $("guide").open ||
+    finalizing ||
+    startingRecording
   )
     return;
   if (e.code === "Space") {
@@ -1164,7 +1278,8 @@ const layerEditor = createLayerEditor({
   },
   toast,
   getRecipe: () => recipe,
-  isRecording: () => !!recording || comparing,
+  isRecording: () =>
+    !!recording || finalizing || startingRecording || comparing,
   getFrame: () => {
     const c = document.createElement("canvas");
     c.width = canvas.width;
