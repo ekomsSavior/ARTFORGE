@@ -33,18 +33,12 @@ export function createHandler(assets) {
       headers.set("ETag", asset.etag);
       if (request.headers.get("If-None-Match") === asset.etag)
         return new Response(null, { status: 304, headers });
-      const zipped = /\bgzip\b/.test(
-        request.headers.get("Accept-Encoding") || "",
-      );
-      headers.set("Vary", "Accept-Encoding");
-      if (zipped) headers.set("Content-Encoding", "gzip");
       if (request.method === "HEAD") return new Response(null, { headers });
       const bytes = Uint8Array.from(atob(asset.data), (c) => c.charCodeAt(0));
-      const body = zipped
-        ? bytes
-        : new Blob([bytes])
-            .stream()
-            .pipeThrough(new DecompressionStream("gzip"));
+      // Sites owns transport compression. Always give its proxy decoded bytes.
+      const body = new Blob([bytes])
+        .stream()
+        .pipeThrough(new DecompressionStream("gzip"));
       return new Response(body, { headers });
     },
   };

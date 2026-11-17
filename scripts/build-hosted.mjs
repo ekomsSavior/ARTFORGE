@@ -28,7 +28,7 @@ async function walk(dir, prefix = "") {
       assets[name] = {
         type: types[extname(path)] || "text/plain; charset=utf-8",
         data: gzipSync(bytes, { level: 9 }).toString("base64"),
-        etag: '"' + createHash("sha256").update(bytes).digest("hex") + '"',
+        etag: '"identity-' + createHash("sha256").update(bytes).digest("hex") + '"',
       };
     }
   }

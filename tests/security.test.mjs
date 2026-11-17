@@ -145,6 +145,11 @@ const worker = createHandler({
     etag: '"sample"',
   },
 });
+test("hosted proxy receives decoded bytes even when a client requests gzip", async () => {
+  const response = await worker.fetch(new Request("https://artforge.test/", { headers: { "Accept-Encoding": "gzip, br" } }));
+  assert.equal(response.headers.get("Content-Encoding"), null);
+  assert.equal(await response.text(), "<!doctype html><p>ARTFORGE</p>");
+});
 test("Host serves only known static assets, with strict browser headers", async () => {
   const r = await worker.fetch(new Request("https://artforge.test/"));
   assert.equal(r.status, 200);
