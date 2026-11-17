@@ -1664,3 +1664,16 @@ dialog code {
   width: 100%;
   margin-bottom: 14px;
 }
+
+.last-export {
+  display: block;
+  padding: 12px;
+  margin: 12px 0;
+  border: 1px solid #aaa;
+  color: #fff;
+  font: 11px var(--mono);
+  overflow-wrap: anywhere;
+}
+.last-export[hidden] {
+  display: none;
+}

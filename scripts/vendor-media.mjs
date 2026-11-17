@@ -8,6 +8,16 @@ for (const [pkg, bundle, target] of [
     `node_modules/${pkg}/dist/bundles/${bundle}.min.mjs`,
     `web/vendor/${target}.mjs`,
   );
+  if (target === "aac-encoder") {
+    const file = `web/vendor/${target}.mjs`;
+    const bundle = await readFile(file, "utf8");
+    if (!bundle.includes('from"mediabunny"'))
+      throw new Error("Review changed vendor imports before updating.");
+    await writeFile(
+      file,
+      bundle.replaceAll('from"mediabunny"', 'from"./mediabunny.mjs"'),
+    );
+  }
   await copyFile(
     `node_modules/${pkg}/LICENSE`,
     `web/vendor/licenses/${target}.txt`,

@@ -1,6 +1,14 @@
-import { recordingFormats } from "./export.mjs";
+import { recordingFormats, withTimeout, captureRecording } from "./export.mjs";
 import { createLayerEditor } from "./layer-editor.mjs";
 import { generateSource } from "./sources.mjs";
+import {
+  safeImage,
+  embeddedImageBlob,
+  checkMediaFile,
+  checkDimensions,
+  waitForMedia,
+  MEDIA_LIMITS,
+} from "./media-safety.mjs";
 import {
   DEFAULTS,
   PRESETS,
@@ -41,7 +49,10 @@ let mediaUrl = null,
   audioLoadId = 0,
   recording = null,
   finalizing = false,
-  recordTimer = null,
+  startingRecording = false,
+  recordSession = null,
+  exportAbort = null,
+  lastDownloadUrl = null,
   toastTimer = null;
 let soundContext = null,
   analyser = null,
@@ -364,22 +375,26 @@ async function setupSound() {
   }
   videoGain.gain.value = audioUrl ? 0 : 1;
   musicGain.gain.value = 1;
-  await soundContext.resume();
+  await withTimeout(
+    soundContext.resume(),
+    4000,
+    "Audio could not start. Tap Play to enable sound, then try recording again.",
+  );
 }
 async function setPlaying(value) {
   if (value === playing) return;
   if (value) {
     try {
-      await setupSound();
+      if (kind === "video" || audioUrl) await setupSound();
       if (kind === "video") {
         const [start, end] = loopBounds();
         if (video.currentTime < start || video.currentTime >= end)
           video.currentTime = start;
-        await video.play();
+        await withTimeout(video.play(), 5000, "Video playback did not start.");
       }
       if (audioUrl) {
         audio.currentTime = audio.duration ? elapsed % audio.duration : 0;
-        await audio.play();
+        await withTimeout(audio.play(), 5000, "Audio playback did not start.");
       }
       playing = true;
       lastTick = performance.now();
@@ -430,7 +445,7 @@ function tick(now) {
   }
 }
 function stopRecord() {
-  if (recording && recording.state !== "inactive") recording.stop();
+  recordSession?.stop();
 }
 function resetTimeline(duration) {
   $("loopIn").value = 0;
@@ -501,29 +516,31 @@ function loadDemo() {
 }
 async function loadMedia(file) {
   if (!file) return;
-  if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-    toast("Choose an image or a browser-playable video, including MP4.");
-    return;
-  }
   const token = ++mediaLoadId;
-  unloadMedia();
-  const url = URL.createObjectURL(file);
-  mediaUrl = url;
+  let replaced = false;
   try {
-    if (file.type.startsWith("video/")) {
-      video.src = url;
-      await new Promise((resolve, reject) => {
-        video.onloadeddata = resolve;
-        video.onerror = () =>
-          reject(
-            new Error(
-              "This video codec is not supported by your browser. Try an H.264 MP4 or WebM.",
-            ),
-          );
-      });
+    if (file.type.startsWith("video/") || /\.(mp4|webm)$/i.test(file.name)) {
+      await checkMediaFile(file);
       if (token !== mediaLoadId) return;
-      if (!Number.isFinite(video.duration) || video.duration <= 0)
-        throw new Error("This video has no readable duration.");
+      unloadMedia();
+      replaced = true;
+      mediaUrl = URL.createObjectURL(file);
+      const loaded = waitForMedia(video);
+      loaded.catch(() => {});
+      video.src = mediaUrl;
+      await loaded;
+      if (token !== mediaLoadId) return;
+      if (
+        !Number.isFinite(video.duration) ||
+        video.duration <= 0 ||
+        video.duration > MEDIA_LIMITS.duration
+      )
+        throw new Error(
+          "Video must have a readable duration of at most one hour.",
+        );
+      checkDimensions(video.videoWidth, video.videoHeight);
+      if (video.readyState < 2) await waitForMedia(video, "loadeddata");
+      if (token !== mediaLoadId) return;
       kind = "video";
       media = video;
       sourceWidth = video.videoWidth;
@@ -532,14 +549,14 @@ async function loadMedia(file) {
       if (!audioUrl)
         $("audioLabel").textContent = "Using video soundtrack, when present.";
     } else {
-      const image = new Image();
-      image.src = url;
-      await image.decode();
+      const image = await safeImage(file);
       if (token !== mediaLoadId) return;
+      unloadMedia();
+      replaced = true;
       kind = "image";
       media = image;
-      sourceWidth = image.naturalWidth;
-      sourceHeight = image.naturalHeight;
+      sourceWidth = image.width;
+      sourceHeight = image.height;
       resetTimeline(8);
       if (!audioUrl)
         $("audioLabel").textContent =
@@ -552,7 +569,7 @@ async function loadMedia(file) {
     toast(`${file.name} loaded locally.`);
   } catch (e) {
     if (token !== mediaLoadId) return;
-    loadDemo();
+    if (replaced || !media) loadDemo();
     toast(e.message);
   }
 }
@@ -637,17 +654,11 @@ $("overlayInput").onchange = async (e) => {
   e.target.value = "";
   if (!file) return;
   const token = ++overlayLoadId;
-  const url = URL.createObjectURL(file);
   try {
-    const img = new Image();
-    img.src = url;
-    await img.decode();
-    if (token !== overlayLoadId) {
-      URL.revokeObjectURL(url);
-      return;
-    }
+    const img = await safeImage(file, 1920);
+    if (token !== overlayLoadId) return;
     if (overlayUrl) URL.revokeObjectURL(overlayUrl);
-    overlayUrl = url;
+    overlayUrl = null;
     customOverlay = img;
     $("overlayName").textContent = file.name;
     $("clearOverlay").hidden = false;
@@ -657,8 +668,7 @@ $("overlayInput").onchange = async (e) => {
     });
     toast("Your image is now the replicated overlay.");
   } catch (e) {
-    URL.revokeObjectURL(url);
-    toast("Could not read that overlay image.");
+    toast("Could not read that overlay image: " + e.message);
   }
 };
 $("clearOverlay").onclick = () => {
@@ -728,10 +738,18 @@ $("resetBtn").onclick = () =>
 function download(blob, name) {
   const url = URL.createObjectURL(blob),
     a = document.createElement("a");
+  if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
+  lastDownloadUrl = url;
+  const saved = $("lastExport");
+  saved.href = url;
+  saved.download = name;
+  saved.textContent = "SAVE " + name;
+  saved.hidden = false;
   a.href = url;
   a.download = name;
+  document.body.append(a);
   a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  a.remove();
 }
 $("saveRecipe").onclick = () => {
   download(
@@ -775,6 +793,7 @@ $("convertInput").onchange = async (e) => {
   const button = $("convertPhone");
   button.disabled = true;
   try {
+    await checkMediaFile(file);
     const { phoneMp4 } = await import("./phone-export.mjs");
     const result = await phoneMp4(file, (p) => {
       button.textContent = `CONVERTING / ${Math.round(p * 100)}%`;
@@ -794,18 +813,24 @@ $("audioInput").onchange = async (e) => {
   e.target.value = "";
   if (!file) return;
   const token = ++audioLoadId;
-  audio.pause();
-  if (audioUrl) URL.revokeObjectURL(audioUrl);
-  audioUrl = URL.createObjectURL(file);
-  audio.src = audioUrl;
-  audio.loop = true;
   try {
-    await new Promise((resolve, reject) => {
-      audio.onloadedmetadata = resolve;
-      audio.onerror = () =>
-        reject(new Error("This audio format could not be decoded."));
-    });
+    await checkMediaFile(file, "audio");
     if (token !== audioLoadId) return;
+    audio.pause();
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    audioUrl = URL.createObjectURL(file);
+    const loaded = waitForMedia(audio);
+    loaded.catch(() => {});
+    audio.src = audioUrl;
+    audio.loop = true;
+    await loaded;
+    if (token !== audioLoadId) return;
+    if (
+      !Number.isFinite(audio.duration) ||
+      audio.duration <= 0 ||
+      audio.duration > MEDIA_LIMITS.duration
+    )
+      throw new Error("Soundtracks must be at most one hour long.");
     await setupSound();
     $("audioLabel").textContent = file.name;
     $("clearAudio").hidden = false;
@@ -931,117 +956,155 @@ function lockRecording(lock) {
   ])
     $(id).disabled = lock;
 }
+async function finishRecording(session, recorder, wantMp4) {
+  const { blob: raw, error } = await session.done;
+  if (recordSession !== session) return;
+  recordSession = null;
+  recording = null;
+  finalizing = true;
+  exportAbort = new AbortController();
+  $("record").disabled = false;
+  $("record").classList.remove("recording");
+  await setPlaying(false);
+  try {
+    if (!raw.size)
+      throw (
+        error ||
+        new Error(
+          "The browser produced no recording. Try again with the studio tab visible.",
+        )
+      );
+    let result = raw;
+    if (wantMp4) {
+      $("record").textContent = "CANCEL MP4 EXPORT";
+      $("exportNote").textContent = "Preparing phone MP4…";
+      const { phoneMp4 } = await import("./phone-export.mjs");
+      result = await phoneMp4(
+        raw,
+        (p) => {
+          $("exportNote").textContent =
+            `Preparing MP4 / ${Math.round(p * 100)}%`;
+        },
+        { signal: exportAbort.signal },
+      );
+    }
+    download(
+      result,
+      `artforge-loop-${recipe.seed}.${wantMp4 ? "mp4" : "webm"}`,
+    );
+    $("exportNote").textContent =
+      "Your loop is ready. Use the save link below if the download did not open.";
+    toast(
+      wantMp4
+        ? "Phone MP4 exported: H.264 video + AAC audio."
+        : "WebM exported. Use MP4 for phone galleries.",
+    );
+  } catch (e) {
+    if (raw.size) {
+      download(
+        raw,
+        `artforge-recovery-${recipe.seed}.${recorder.mimeType.includes("mp4") ? "mp4" : "webm"}`,
+      );
+      $("exportNote").textContent =
+        "Raw recording recovered. Use the save link below.";
+    } else
+      $("exportNote").textContent =
+        "No video was captured. Please retry with the studio tab visible.";
+    toast(
+      `${e.message}${raw.size ? " Your raw recording is available below." : ""}`,
+    );
+  } finally {
+    exportAbort = null;
+    finalizing = false;
+    startingRecording = false;
+    lockRecording(false);
+    updateRecordingFormat();
+    $("record").innerHTML = "RECORD LOOP <span>↗</span>";
+    updateTransport();
+  }
+}
 $("record").onclick = async () => {
-  if (finalizing) return;
+  if (finalizing) {
+    exportAbort?.abort();
+    return;
+  }
   if (recording) {
     stopRecord();
     return;
   }
-  if (!updateLoop()) return;
+  if (startingRecording || !updateLoop()) return;
   const [start, end] = loopBounds();
   const seconds =
     $("recordDuration").value === "loop"
       ? Math.min(60, end - start)
       : Number($("recordDuration").value);
+  startingRecording = true;
+  $("record").disabled = true;
+  $("record").textContent = "STARTING…";
+  lockRecording(true);
+  let stream;
   try {
+    // Start audio while the Record click still carries user activation (especially Safari).
+    const soundReady =
+      audioUrl || kind === "video" ? setupSound() : Promise.resolve();
+    soundReady.catch(() => {});
     await setPlaying(false);
     elapsed = start;
     if (kind === "video") {
       video.currentTime = start;
-      await new Promise((resolve) => {
-        if (!video.seeking) resolve();
-        else video.addEventListener("seeked", resolve, { once: true });
-      });
+      await withTimeout(
+        new Promise((resolve) => {
+          if (!video.seeking) resolve();
+          else video.addEventListener("seeked", resolve, { once: true });
+        }),
+        5000,
+        "Video seeking timed out. Try a different loop start.",
+      );
     }
     previous = null;
-    await setupSound();
+    await soundReady;
     if (audioUrl && Number.isFinite(audio.duration))
       audio.currentTime = start % audio.duration;
-    draw();
-    const stream = canvas.captureStream(24);
+    stream = canvas.captureStream(24);
     if ((audioUrl || kind === "video") && mixDestination)
       for (const track of mixDestination.stream.getAudioTracks())
         stream.addTrack(track.clone());
     const wantMp4 = $("videoFormat").value === "mp4";
-    if (wantMp4) import("./phone-export.mjs").catch(() => {});
     const recorder = new MediaRecorder(stream, {
       mimeType: recordingType,
       videoBitsPerSecond: 6000000,
     });
     recording = recorder;
-    const chunks = [];
-    const started = performance.now();
-    recorder.ondataavailable = (e) => {
-      if (e.data.size) chunks.push(e.data);
-    };
-    recorder.onstop = async () => {
-      clearInterval(recordTimer);
-      stream.getTracks().forEach((t) => t.stop());
-      recording = null;
-      finalizing = true;
-      $("record").disabled = true;
-      $("record").classList.remove("recording");
-      setPlaying(false);
-      const raw = new Blob(chunks, { type: recorder.mimeType });
-      try {
-        if (!chunks.length)
-          throw new Error("The browser produced no recording.");
-        let result = raw;
-        if (wantMp4) {
-          $("record").textContent = "PACKAGING MP4…";
-          const { phoneMp4 } = await import("./phone-export.mjs");
-          result = await phoneMp4(raw, (p) => {
-            $("record").textContent = `PACKAGING / ${Math.round(p * 100)}%`;
-          });
-        }
-        download(
-          result,
-          `artforge-loop-${recipe.seed}.${wantMp4 ? "mp4" : "webm"}`,
-        );
-        toast(
-          wantMp4
-            ? "Phone MP4 exported: H.264 video + AAC audio."
-            : "WebM exported. Some phone galleries need MP4 instead.",
-        );
-      } catch (e) {
-        if (chunks.length)
-          download(
-            raw,
-            `artforge-recovery-${recipe.seed}.${recorder.mimeType.includes("mp4") ? "mp4" : "webm"}`,
-          );
-        toast(
-          `MP4 packaging failed: ${e.message} Your raw recording was saved for recovery.`,
-        );
-      } finally {
-        finalizing = false;
-        lockRecording(false);
-        updateRecordingFormat();
-        $("record").innerHTML = "RECORD LOOP <span>↗</span>";
-        updateTransport();
-      }
-    };
-    recorder.onerror = () => {
-      toast("Recording failed in this browser.");
-      stopRecord();
-    };
-    recorder.start(250);
-    lockRecording(true);
+    const session = captureRecording(recorder, stream, {
+      seconds,
+      onTick: (remaining) => {
+        $("record").textContent =
+          remaining > 0 ? `STOP / ${remaining.toFixed(1)}s` : "FINISHING…";
+      },
+    });
+    recordSession = session;
+    void finishRecording(session, recorder, wantMp4);
+    startingRecording = false;
+    $("record").disabled = false;
     $("record").classList.add("recording");
+    $("record").textContent = `STOP / ${seconds.toFixed(1)}s`;
+    $("exportNote").textContent = "Recording your loop…";
+    draw();
+    stream.getVideoTracks()[0]?.requestFrame?.();
     await setPlaying(true);
-    if (!playing) {
-      stopRecord();
-      return;
-    }
-    recordTimer = setInterval(() => {
-      const remaining = seconds - (performance.now() - started) / 1000;
-      $("record").textContent = `STOP / ${Math.max(0, remaining).toFixed(1)}s`;
-      if (remaining <= 0) stopRecord();
-    }, 100);
+    if (recordSession !== session) await setPlaying(false);
+    else if (!playing) stopRecord();
   } catch (e) {
-    stopRecord();
-    recording = null;
-    lockRecording(false);
-    toast(`Recording unavailable: ${e.message}`);
+    if (recordSession) stopRecord();
+    else {
+      stream?.getTracks().forEach((track) => track.stop());
+      recording = null;
+      startingRecording = false;
+      lockRecording(false);
+      updateRecordingFormat();
+      $("record").innerHTML = "RECORD LOOP <span>↗</span>";
+      toast(`Recording unavailable: ${e.message}`);
+    }
   }
 };
 document.addEventListener("visibilitychange", () => {
@@ -1088,6 +1151,7 @@ document.addEventListener("keydown", (e) => {
 });
 window.addEventListener("beforeunload", () => {
   stopRecord();
+  if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
   if (mediaUrl) URL.revokeObjectURL(mediaUrl);
   if (audioUrl) URL.revokeObjectURL(audioUrl);
   if (overlayUrl) URL.revokeObjectURL(overlayUrl);
@@ -1132,29 +1196,24 @@ $("saveProject").onclick = () => {
   );
 };
 $("loadProject").onclick = () => $("projectInput").click();
+let projectLoadId = 0;
 $("projectInput").onchange = async (e) => {
   const file = e.target.files[0];
   e.target.value = "";
   if (!file) return;
+  const token = ++projectLoadId;
   try {
-    if (file.size > 64000000) throw new Error("Layer file exceeds 64 MB.");
+    if (file.size > MEDIA_LIMITS.projectBytes)
+      throw new Error("Layer file exceeds 64 MB.");
     const data = JSON.parse(await file.text()),
       next = validateRecipe(data.recipe);
     let spamImage = null;
     if (data.spamAsset) {
-      if (
-        typeof data.spamAsset !== "string" ||
-        !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(
-          data.spamAsset,
-        ) ||
-        data.spamAsset.length > 12000000
-      )
-        throw new Error("Invalid spam image.");
-      spamImage = new Image();
-      spamImage.src = data.spamAsset;
-      await spamImage.decode();
+      spamImage = await safeImage(embeddedImageBlob(data.spamAsset), 1920);
     }
-    await layerEditor.importProject(data);
+    if (token !== projectLoadId) return;
+    await layerEditor.importProject(data, () => token === projectLoadId);
+    if (token !== projectLoadId) return;
     if (overlayUrl) URL.revokeObjectURL(overlayUrl);
     overlayUrl = null;
     overlayLoadId++;

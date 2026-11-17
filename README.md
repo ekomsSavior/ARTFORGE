@@ -695,3 +695,7 @@ reproduces the pinned Mediabunny 1.66.0 and AAC encoder 1.66.0 modules. Their MP
 licenses, source files, AAC build instructions, and FFmpeg LGPL notices are
 included under `web/vendor/`. Upstream: https://github.com/Vanilagy/mediabunny.
 The custom blend formulas follow https://www.w3.org/TR/compositing-1/#blending.
+
+## Browser security
+
+See [SECURITY.md](SECURITY.md) for supported formats, file limits, security controls, verification, and remaining risks. The hosted studio is a static-file-only Worker built with `node scripts/build-hosted.mjs`; it does not accept media uploads.

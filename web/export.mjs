@@ -16,3 +16,90 @@ export function recordingFormats(supports) {
     webm: WEBM_TYPES.find(supports) || null,
   };
 }
+export function withTimeout(promise, milliseconds, message) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), milliseconds);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+// The stop deadline is installed immediately, independently of audio/playback promises.
+export function captureRecording(
+  recorder,
+  stream,
+  {
+    seconds,
+    onTick = () => {},
+    timers = globalThis,
+    now = () => performance.now(),
+  },
+) {
+  const chunks = [];
+  let deadline,
+    ticker,
+    watchdog,
+    settled = false,
+    stopping = false,
+    resolveDone,
+    failure;
+  const done = new Promise((resolve) => {
+    resolveDone = resolve;
+  });
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    timers.clearTimeout(deadline);
+    timers.clearInterval(ticker);
+    timers.clearTimeout(watchdog);
+    stream.getTracks().forEach((track) => track.stop());
+    resolveDone({
+      blob: new Blob(chunks, { type: recorder.mimeType }),
+      error: failure,
+    });
+  };
+  const stop = () => {
+    if (stopping || settled) return;
+    stopping = true;
+    onTick(0);
+    watchdog = timers.setTimeout(() => {
+      failure ||= new Error(
+        "Recorder did not finish; recovered available chunks.",
+      );
+      finish();
+    }, 10000);
+    try {
+      if (recorder.state !== "inactive") recorder.stop();
+      else finish();
+    } catch (error) {
+      failure = error;
+      finish();
+    }
+  };
+  recorder.ondataavailable = (e) => {
+    if (!settled && e.data.size) chunks.push(e.data);
+  };
+  recorder.onstop = finish;
+  recorder.onerror = (e) => {
+    failure = e.error || new Error("Recording failed.");
+    stop();
+  };
+  const started = now();
+  deadline = timers.setTimeout(
+    stop,
+    Math.max(0.1, Math.min(60, seconds)) * 1000,
+  );
+  ticker = timers.setInterval(
+    () => onTick(Math.max(0, seconds - (now() - started) / 1000)),
+    100,
+  );
+  try {
+    recorder.start(250);
+  } catch (error) {
+    failure = error;
+    finish();
+    throw error;
+  }
+  return { done, stop };
+}

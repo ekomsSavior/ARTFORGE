@@ -2,6 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src blob:; font-src 'self'; worker-src 'self' blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#101010" />
     <meta
@@ -14,9 +19,6 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' fill='%23111'/%3E%3Cpath d='M5 32 17 8h9l9 24h-8l-2-6H15l-3 6zm13-12h5l-2-7z' fill='silver'/%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="style.css" />
-    <script type="importmap">
-      { "imports": { "mediabunny": "./vendor/mediabunny.mjs" } }
-    </script>
     <script type="module" src="app.mjs"></script>
   </head>
   <body>
@@ -63,7 +65,12 @@
           ><span>Photos / screenshots / video</span
           ><span class="file-types">PNG · JPG · WEBP · GIF · MP4 · WEBM</span>
         </button>
-        <input id="mediaInput" type="file" accept="image/*,video/*" hidden />
+        <input
+          id="mediaInput"
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm"
+          hidden
+        />
         <div class="source-info">
           <span id="sourceName">SIGNAL_GARDEN / DEMO</span
           ><button
@@ -232,7 +239,12 @@
             ×
           </button>
         </div>
-        <input id="audioInput" type="file" accept="audio/*" hidden />
+        <input
+          id="audioInput"
+          type="file"
+          accept="audio/mpeg,audio/wav,audio/ogg,audio/flac,audio/mp4,audio/webm"
+          hidden
+        />
         <div class="audio-options">
           <label><input id="reactive" type="checkbox" /> REACT TO SOUND</label
           ><label
@@ -284,12 +296,13 @@
           ><span id="recordFormat">CHECKING VIDEO SUPPORT</span>
         </div>
         <p id="formatHelp" class="format-help"></p>
+        <a id="lastExport" class="last-export" hidden download></a>
         <div class="convert-row">
           <button id="convertPhone">CONVERT AN OLD DOWNLOAD TO MP4</button
           ><input
             type="file"
             id="convertInput"
-            accept="video/*,.webm,.mp4"
+            accept="video/mp4,video/webm,.mp4,.webm"
             hidden
           />
         </div>
@@ -329,7 +342,12 @@
             </div>
             <span id="overlayName"
               >Or replicate your own image / screenshot.</span
-            ><input id="overlayInput" type="file" accept="image/*" hidden />
+            ><input
+              id="overlayInput"
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              hidden
+            />
           </div>
           <label class="path-label" for="motionPath">MOTION PATH</label
           ><select id="motionPath">
@@ -357,6 +375,12 @@
     </footer>
     <div id="toast" role="status" aria-live="polite"></div>
     <dialog id="guide">
+      <p class="format-help">
+        Import limits: PNG, JPEG, GIF stills, and static WebP up to 24 MB / 32
+        megapixels / 8192px per edge. MP4 and WebM up to 200 MB / one hour. SVG
+        and documents are not supported. Images are cleaned and rendered
+        locally.
+      </p>
       <button id="closeGuide" class="close-dialog" aria-label="Close guide">
         ×
       </button>

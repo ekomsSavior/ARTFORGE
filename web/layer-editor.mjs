@@ -13,6 +13,7 @@ import {
   applyLayerFilters,
 } from "./layers.mjs";
 import { PRESETS, recipeFromPreset } from "./recipe.mjs";
+import { safeImage, embeddedImageBlob } from "./media-safety.mjs";
 const $ = (id) => document.getElementById(id);
 const label = (s) => s.replaceAll("-", " ").toUpperCase();
 export function createLayerEditor({
@@ -33,7 +34,7 @@ export function createLayerEditor({
   const host = $("layerEditor");
   host.innerHTML = `<div class="section-head"><span>04 / LAYERS & TYPE</span><span class="tiny">COMPOSE THE DAMAGE</span></div>
   <div class="layer-toolbar"><button id="addText">+ TEXT</button><button id="addImage">+ IMAGE</button><button id="freezeFrame">+ FRAME</button><button id="addModule">+ MODULE</button></div>
-  <input id="layerImageInput" type="file" accept="image/*" hidden>
+  <input id="layerImageInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
   <div class="layer-workspace"><div><div id="layerList" class="layer-list" role="group" aria-label="Artwork layers"></div><div class="layer-actions"><button id="layerUp" title="Move selected layer forward">FORWARD</button><button id="layerDown" title="Move selected layer backward">BACK</button><button id="duplicateLayer">COPY</button><button id="deleteLayer">DELETE</button></div><p class="layer-hint">Top of the list = front of the artwork.<br>Drag text or images on the canvas. Resize with the corner handle. Done editing, Escape, or an empty-canvas click hides the handles.</p><div class="layer-project"><button id="saveProject">SAVE LAYERS</button><button id="loadProject">LOAD LAYERS</button><input id="projectInput" type="file" accept=".json" hidden></div><p class="layer-hint">Layer files include text and overlay images. Reimport your base video and audio separately.</p></div>
   <div class="layer-inspector"><button id="finishLayerInspector" class="done-editing" hidden>DONE EDITING</button><label>SELECTED LAYER<input id="layerName" maxlength="80" aria-label="Layer name"></label><label>BLEND MODE<select id="layerBlend">${BLEND_MODES.map((v) => `<option value="${v}">${label(v)}</option>`).join("")}</select></label>
   <label class="layer-slider">OPACITY <output id="layerOpacityValue"></output><input id="layerOpacity" aria-label="Layer opacity" type="range" min="0" max="100" value="100"></label>
@@ -216,17 +217,11 @@ export function createLayerEditor({
   };
   async function addImage(fileOrCanvas, name) {
     try {
-      let source = fileOrCanvas,
-        url;
+      if (state.layers.length >= 16)
+        throw new Error("Maximum 16 layers per composition.");
+      let source = fileOrCanvas;
       if (fileOrCanvas instanceof File) {
-        url = URL.createObjectURL(fileOrCanvas);
-        try {
-          source = new Image();
-          source.src = url;
-          await source.decode();
-        } finally {
-          URL.revokeObjectURL(url);
-        }
+        source = await safeImage(fileOrCanvas, 1920);
       }
       const ratio = Math.min(1, 1920 / Math.max(source.width, source.height)),
         c = document.createElement("canvas");
@@ -235,9 +230,7 @@ export function createLayerEditor({
       c.getContext("2d").drawImage(source, 0, 0, c.width, c.height);
       const l = newLayer("image", name.slice(0, 80));
       l.asset = c.toDataURL("image/png");
-      l.image = new Image();
-      l.image.src = l.asset;
-      await l.image.decode();
+      l.image = c;
       l.width = 0.45;
       add(l);
     } catch (e) {
@@ -443,8 +436,9 @@ export function createLayerEditor({
       layers: serializeLayers(state.layers),
     };
   }
-  async function importProject(data) {
+  async function importProject(data, stillCurrent = () => true) {
     if (
+      !data ||
       data.app !== "ARTFORGE" ||
       data.type !== "layer-project" ||
       data.version !== 1 ||
@@ -455,12 +449,19 @@ export function createLayerEditor({
     const base = validateStyle(data.base || {}),
       spam = validateStyle(data.spam || {}),
       layers = data.layers.map(validateLayer);
+    let pixels = 0;
     for (const l of layers)
       if (l.type === "image") {
-        l.image = new Image();
-        l.image.src = l.asset;
-        await l.image.decode();
+        if (!stillCurrent()) return;
+        l.image = await safeImage(embeddedImageBlob(l.asset), 1920);
+        pixels += l.image.width * l.image.height;
+        if (pixels > 24000000)
+          throw new Error(
+            "Combined image layers exceed 24 megapixels. Use smaller overlays.",
+          );
+        l.asset = l.image.toDataURL("image/png");
       }
+    if (!stillCurrent()) return;
     state.base = base;
     state.spam = spam;
     state.layers = layers;

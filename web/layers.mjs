@@ -140,10 +140,8 @@ export function validateLayer(value) {
   if (value.type === "image") {
     if (
       typeof value.asset !== "string" ||
-      !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(
-        value.asset,
-      ) ||
-      value.asset.length > 12000000
+      value.asset.length > 12000000 ||
+      !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value.asset)
     )
       throw new Error("Invalid embedded image.");
     l.asset = value.asset;
