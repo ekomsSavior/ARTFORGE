@@ -1634,13 +1634,6 @@ dialog code {
   padding: 0 17px 17px;
   margin: 0;
 }
-@media (min-width: 851px) {
-  .stage {
-    position: sticky;
-    top: 0;
-    z-index: 5;
-  }
-}
 .convert-row {
   padding: 0 17px 17px;
 }
